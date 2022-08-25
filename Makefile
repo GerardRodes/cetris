@@ -1,7 +1,7 @@
 CC = clang
-CFLAGS = -std=c17 -Iinclude -Llib \
+CFLAGS = -std=c2x -Iinclude -Llib \
 	-Wall -Wextra -Wswitch -Wvla -Wimplicit-fallthrough \
-	-Wno-unused-label \
+	-Wno-unused-label -Wno-unused-parameter \
 	-pedantic \
 	$(shell PKG_CONFIG_PATH=lib pkg-config --cflags glfw3)
 CLIBS = $(shell PKG_CONFIG_PATH=lib pkgconf glfw3 --libs --static)
@@ -12,8 +12,12 @@ else
 	CFLAGS += -O0 -g
 endif
 
+.PHONY: main
 main: bin/main
 	bin/main
+
+bin/main: $(wildcard src/*.c) $(wildcard src/*.h)
+	$(CC) $(CFLAGS) src/main.c src/gl3w.c -o bin/main $(CLIBS)
 
 clean:
 	rm bin/*
