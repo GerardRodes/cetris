@@ -2,19 +2,17 @@
 #include <stdlib.h>
 
 #include "GL/gl3w.h"
-#include "GL/glcorearb.h"
 #include "GLFW/glfw3.h"
+#include "cglm/cglm.h"
 
 #include "util.h"
+#include "board.h"
 
 #define OGL_MAJOR 3
 #define OGL_MINOR 3
 
-#define BOARD_W 10
-#define BOARD_H 10
-
-size_t WIN_W = 640;
-size_t WIN_H = 480;
+size_t WIN_W = 500;
+size_t WIN_H = 500;
 
 const unsigned char pieces[1][4][16] = {
 	{
@@ -42,18 +40,15 @@ const unsigned char pieces[1][4][16] = {
 	}
 };
 
-const unsigned char board[BOARD_H][BOARD_W] = {
-	{1,0,1,0,1,0,1,0,1,0},
-	{0,1,1,1,0,1,0,1,0,1},
-	{1,0,1,0,1,0,1,0,1,0},
-	{0,1,0,1,0,1,0,1,0,1},
-	{1,0,1,0,1,0,1,0,1,0},
-	{0,1,0,1,0,1,0,1,0,1},
-	{1,0,1,0,1,0,1,0,1,0},
-	{0,1,0,1,0,1,0,1,0,1},
-	{1,0,1,0,1,0,1,0,1,0},
-	{0,1,0,1,0,1,0,1,0,1},
-};
+GLuint quad_prog, board_prog;
+
+mat4 proj = {0};
+
+void update_proj() {
+	glm_ortho_default((float)WIN_W / WIN_H, &proj[0]);
+	SET_UNIFORM(quad_prog, u_proj_tx, glUniformMatrix4fv(_loc, 1, GL_FALSE, proj[0]))
+	SET_UNIFORM(board_prog, u_proj_tx, glUniformMatrix4fv(_loc, 1, GL_FALSE, proj[0]))
+}
 
 GLFWwindow* window;
 
@@ -75,6 +70,7 @@ void on_framebuffer_size(GLFWwindow* window, int width, int height) {
 	// make sure the viewport matches the new window dimensions; note that width and
 	// height will be significantly larger than specified on retina displays.
 	glViewport(0, 0, width, height);
+	update_proj();
 }
 
 int main () {
@@ -110,80 +106,44 @@ int main () {
 		}
 	}
 
-	glViewport(0, 0, WIN_W, WIN_H);
+	// DEBUG
+	{
+		glEnable(GL_DEBUG_OUTPUT);
+		glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS);
+		glDebugMessageCallback(ogl_on_message, 0);
+	}
 
-	GLuint quad_prog = load_program("shaders/quad.vert", "shaders/quad.frag");
+	board_prog = load_program("shaders/board.vert", "shaders/board.frag");
+	quad_prog = load_program("shaders/quad.vert", "shaders/quad.frag");
 
-	const float quad_vert[4][2] = {{-1,-1},{-1,+1},{+1,+1},{+1,-1}};
+	board main_board = board_init(10, 20, board_prog, quad_prog);
 
-	unsigned int quad_pos[BOARD_H * BOARD_W][2] = {0};
-	GLsizei quad_pos_c = 0;
-	for (GLsizei x = 0; x < BOARD_W; x++) {
-		for (GLsizei y = 0; y < BOARD_H; y++) {
-			if (board[y][x] == 0) {
-				continue;
+	// DEBUG BOARD
+	{
+		for (unsigned char row = 0; row < main_board.rows; row++) {
+			for (unsigned char col = 0; col < main_board.cols; col++) {
+				board_set_cell(main_board, col, row, (col+row) % 2);
 			}
-			quad_pos[quad_pos_c][0] = x;
-			quad_pos[quad_pos_c][1] = y;
-			quad_pos_c++;
 		}
 	}
+
+	on_framebuffer_size(window, WIN_W, WIN_H);
 
 	{
-		glUseProgram(quad_prog);
-		GLint loc = glGetUniformLocation(quad_prog, "cols");
-		if (loc == -1) {
-			panic("uniform cols not found");
-		}
-		glUniform1i(loc, BOARD_W);
-		glUseProgram(0);
+		mat4 board_tx = {0};
+		board_tx_matrix(main_board, &board_tx, (vec2){0, 0});
+		SET_UNIFORM(board_prog, u_board_tx, glUniformMatrix4fv(_loc, 1, GL_FALSE, board_tx[0]));
+		SET_UNIFORM(quad_prog, u_board_tx, glUniformMatrix4fv(_loc, 1, GL_FALSE, board_tx[0]));
 	}
 
-	GLuint quad_vbo, quad_pos_vbo, quad_vao;
-	{
-		glGenVertexArrays(1, &quad_vao);
-		glBindVertexArray(quad_vao);
-		{
-			glGenBuffers(1, &quad_vbo);
-			glBindBuffer(GL_ARRAY_BUFFER, quad_vbo);
-			glBufferData(GL_ARRAY_BUFFER, sizeof(quad_vert), quad_vert, GL_STATIC_DRAW);
-			{
-				GLint pos = glGetAttribLocation(quad_prog, "a_quad");
-				if (pos == -1) {
-					panic("attrib a_quad not found");
-				}
-				glVertexAttribPointer(pos, 2, GL_FLOAT, GL_FALSE, 0, 0);
-				glEnableVertexAttribArray(pos);
-			}
-			glBindBuffer(GL_ARRAY_BUFFER, 0);
-		}
-		{
-			glGenBuffers(1, &quad_pos_vbo);
-			glBindBuffer(GL_ARRAY_BUFFER, quad_pos_vbo);
-			glBufferData(GL_ARRAY_BUFFER, sizeof(quad_pos), quad_pos, GL_STATIC_DRAW);
-			{
-				GLint pos = glGetAttribLocation(quad_prog, "a_ins_pos");
-				if (pos == -1) {
-					printf("attrib a_ins_pos not found\n");
-				}
-				glVertexAttribPointer(pos, 2, GL_UNSIGNED_INT, GL_FALSE, 0, 0);
-				glEnableVertexAttribArray(pos);
-				glVertexAttribDivisor(pos, 1);
-			}
-			glBindBuffer(GL_ARRAY_BUFFER, 0);
-		}
-		glBindVertexArray(0);
-	}
+	board_init_vao(&main_board);
+	board_init_grid_vao(&main_board);
 
 	while (!glfwWindowShouldClose(window)) {
 		glClearColor(0.2, 0.4, 0.6, 1);
     glClear(GL_COLOR_BUFFER_BIT);
 
-		{
-			glUseProgram(quad_prog);
-			glBindVertexArray(quad_vao);
-			glDrawArraysInstanced(GL_TRIANGLE_FAN, 0, 4, quad_pos_c);
-		}
+		board_draw(main_board);
 
     glfwSwapBuffers(window);
     glfwPollEvents();
