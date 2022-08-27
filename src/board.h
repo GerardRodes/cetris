@@ -2,10 +2,11 @@
 #define OGL_BOARD_H
 
 #include <stdlib.h>
+#include <assert.h>
 
+#include "GL/gl3w.h"
 #include "GL/glcorearb.h"
 #include "cglm/cglm.h"
-#include "GL/gl3w.h"
 
 typedef struct {
 	const unsigned char cols;
@@ -13,32 +14,28 @@ typedef struct {
 	struct {
 		GLuint vao;
 		GLuint prog;
+		struct {
+			GLint pos;
+		} a;
 	} gl_board;
 	struct {
-		GLuint vao;
 		GLuint prog;
-		unsigned int count;
-	} gl_grid;
-	char* grid;
+		GLuint vao;
+		GLuint quads_vbo;
+		struct {
+			GLint ins_pos;
+			GLint quad;
+		} a;
+		unsigned char* quads_buf;
+		unsigned int quads_cap;
+		unsigned int quads_len;
+	} gl_quad;
+	char* grid_buf;
 } board;
 
-board board_init (
-	unsigned char cols,
-	unsigned char rows,
-	GLuint board_prog,
-	GLuint grid_prog
-) {
-	return (board){
-		.cols = cols,
-		.rows = rows,
-		.gl_board = { .prog = board_prog, .vao = 0 },
-		.gl_grid = { .prog = grid_prog, .vao = 0 },
-		.grid = calloc(cols * rows, sizeof(char)),
-	};
-}
-
 void board_free (board b) {
-	free(b.grid);
+	free(b.grid_buf);
+	free(b.gl_quad.quads_buf);
 }
 
 void board_tx_matrix (board b, mat4* tx_matrix, vec2 center) {
@@ -52,24 +49,37 @@ void board_tx_matrix (board b, mat4* tx_matrix, vec2 center) {
 }
 
 void board_set_cell(board b, unsigned char col, unsigned char row, unsigned char v) {
-	*(b.grid+(row*b.cols)+col) = v;
+	*(b.grid_buf+(row*b.cols)+col) = v;
+}
+
+unsigned char board_get_cell(board b, unsigned char col, unsigned char row) {
+	return *(b.grid_buf+(row*b.cols)+col);
 }
 
 void board_quads_pos(board b, unsigned char* out, unsigned int* out_len) {
 	unsigned int len = 0;
-	for (unsigned char y = 0; y < b.rows; y++) {
-		for (unsigned char x = 0; x < b.cols; x++) {
-			// warning: ptr arithmetic yolo
-			if (*(b.grid+(y*b.cols)+x) == 0) {
+	for (unsigned char row = 0; row < b.rows; row++) {
+		for (unsigned char col = 0; col < b.cols; col++) {
+			if (board_get_cell(b, col, row) == 0) {
 				continue;
 			}
 			//todo: quad color
-			out[len*2] = x;
-			out[(len*2)+1] = y;
+			out[len*2] = col;
+			out[(len*2)+1] = row;
 			len++;
 		}
 	}
 	*out_len = len;
+}
+
+void board_send_quads_pos(board* b) {
+	assert(b->gl_quad.quads_vbo != 0);
+	glBindBuffer(GL_ARRAY_BUFFER, b->gl_quad.quads_vbo);
+
+	board_quads_pos(*b, b->gl_quad.quads_buf, &b->gl_quad.quads_len);
+	glBufferData(GL_ARRAY_BUFFER, b->gl_quad.quads_cap, b->gl_quad.quads_buf, GL_DYNAMIC_DRAW);
+
+	glBindBuffer(GL_ARRAY_BUFFER, 0);
 }
 
 void board_init_vao(board* b) {
@@ -88,13 +98,8 @@ void board_init_vao(board* b) {
 		glBindBuffer(GL_ARRAY_BUFFER, vtx_vbo);
 		glBufferData(GL_ARRAY_BUFFER, sizeof(board_vtx), board_vtx, GL_STATIC_DRAW);
 		{
-			GLint pos = glGetAttribLocation(b->gl_board.prog, "a_pos");
-			if (pos == -1) {
-				fprintf(stderr, "attrib a_pos not found\n");
-			} else {
-				glVertexAttribPointer(pos, 2, GL_FLOAT, GL_FALSE, 0, 0);
-				glEnableVertexAttribArray(pos);
-			}
+			glVertexAttribPointer(b->gl_board.a.pos, 2, GL_FLOAT, GL_FALSE, 0, 0);
+			glEnableVertexAttribArray(b->gl_board.a.pos);
 		}
 		glBindBuffer(GL_ARRAY_BUFFER, 0);
 	}
@@ -104,46 +109,29 @@ void board_init_vao(board* b) {
 void board_init_grid_vao(board* b) {
 	const float quad_vtx[4][2] = {{0,1},{0,0},{1,0},{1,1}}; // on board coords
 
-	glGenVertexArrays(1, &b->gl_grid.vao);
-	glBindVertexArray(b->gl_grid.vao);
+	glGenVertexArrays(1, &b->gl_quad.vao);
+	glBindVertexArray(b->gl_quad.vao);
+	// quad vtxs
 	{
 		GLuint vtx_vbo;
 		glGenBuffers(1, &vtx_vbo);
 		glBindBuffer(GL_ARRAY_BUFFER, vtx_vbo);
 		glBufferData(GL_ARRAY_BUFFER, sizeof(quad_vtx), quad_vtx, GL_STATIC_DRAW);
 		{
-			GLint pos = glGetAttribLocation(b->gl_grid.prog, "a_quad");
-			if (pos == -1) {
-				fprintf(stderr, "attrib a_quad not found\n");
-			} else {
-				glVertexAttribPointer(pos, 2, GL_FLOAT, GL_FALSE, 0, 0);
-				glEnableVertexAttribArray(pos);
-			}
+			glVertexAttribPointer(b->gl_quad.a.quad, 2, GL_FLOAT, GL_FALSE, 0, 0);
+			glEnableVertexAttribArray(b->gl_quad.a.quad);
 		}
 		glBindBuffer(GL_ARRAY_BUFFER, 0);
 	}
+	// quads positions in grid
 	{
-		GLuint quad_pos_vbo;
-		glGenBuffers(1, &quad_pos_vbo);
-		glBindBuffer(GL_ARRAY_BUFFER, quad_pos_vbo);
-		{
-			unsigned int malloc_size = b->rows * b->cols * 2 * sizeof(unsigned char);
-			unsigned char* quad_pos = malloc(malloc_size);
-			board_quads_pos(*b, quad_pos, &b->gl_grid.count);
-			glBufferData(GL_ARRAY_BUFFER, malloc_size, quad_pos, GL_STATIC_DRAW);
-			free(quad_pos); // todo: reuse buffer, add to board struct
-		}
-		{
-			GLint pos = glGetAttribLocation(b->gl_grid.prog, "a_ins_pos");
-			if (pos == -1) {
-				fprintf(stderr, "attrib a_ins_pos not found\n");
-			} else {
-				glVertexAttribPointer(pos, 2, GL_UNSIGNED_BYTE, GL_FALSE, 0, 0);
-				glEnableVertexAttribArray(pos);
-				glVertexAttribDivisor(pos, 1);
-			}
-		}
+		glGenBuffers(1, &b->gl_quad.quads_vbo);
+		glBindBuffer(GL_ARRAY_BUFFER, b->gl_quad.quads_vbo);
+			glVertexAttribPointer(b->gl_quad.a.ins_pos, 2, GL_UNSIGNED_BYTE, GL_FALSE, 0, 0);
+			glEnableVertexAttribArray(b->gl_quad.a.ins_pos);
+			glVertexAttribDivisor(b->gl_quad.a.ins_pos, 1);
 		glBindBuffer(GL_ARRAY_BUFFER, 0);
+		board_send_quads_pos(b);
 	}
 	glBindVertexArray(0);
 }
@@ -156,11 +144,66 @@ void board_draw (board b) {
 		glUseProgram(0);
 	}
 	{
-		glUseProgram(b.gl_grid.prog);
-		glBindVertexArray(b.gl_grid.vao);
-		glDrawArraysInstanced(GL_TRIANGLE_FAN, 0, 4, (int)b.gl_grid.count);
+		glUseProgram(b.gl_quad.prog);
+		glBindVertexArray(b.gl_quad.vao);
+		glDrawArraysInstanced(GL_TRIANGLE_FAN, 0, 4, (int)b.gl_quad.quads_len);
 		glUseProgram(0);
 	}
+}
+
+void board_debug (board b, unsigned int mod) {
+	for (unsigned int row = 0; row < b.rows; row++) {
+		for (unsigned int col = 0; col < b.cols; col++) {
+			board_set_cell(b, col, row, (col+row) % (mod+1));
+		}
+	}
+}
+
+
+
+board board_init (
+	unsigned char cols,
+	unsigned char rows,
+	GLuint board_prog,
+	GLuint quad_prog
+) {
+	// todo: combine allocs
+	unsigned int quads_cap = rows * cols * 2;
+	board b = {
+		.cols = cols,
+		.rows = rows,
+		.gl_board = {
+			.prog = board_prog,
+			.vao = 0,
+			.a = {
+				.pos = -1,
+			}
+		},
+		.gl_quad = {
+			.prog = quad_prog,
+			.vao = 0,
+			.quads_cap = quads_cap,
+			.quads_buf = calloc(quads_cap, sizeof(char)),
+			.a = {
+				.ins_pos = -1,
+				.quad = -1,
+			}
+		},
+		// internal representation in bytes of the tetris grid
+		.grid_buf = calloc(cols * rows, sizeof(char)),
+	};
+
+	b.gl_board.a.pos = glGetAttribLocation(board_prog, "a_pos");
+		assert(b.gl_board.a.pos != -1);
+	b.gl_quad.a.ins_pos = glGetAttribLocation(quad_prog, "a_ins_pos");
+		assert(b.gl_quad.a.ins_pos != -1);
+	b.gl_quad.a.quad = glGetAttribLocation(quad_prog, "a_quad");
+		assert(b.gl_quad.a.quad != -1);
+
+	board_init_vao(&b);
+	board_init_grid_vao(&b);
+
+	return b;
 }
 
 #endif

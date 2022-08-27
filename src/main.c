@@ -7,6 +7,7 @@
 
 #include "util.h"
 #include "board.h"
+#include "game.h"
 
 #define OGL_MAJOR 3
 #define OGL_MINOR 3
@@ -14,40 +15,14 @@
 size_t WIN_W = 500;
 size_t WIN_H = 500;
 
-const unsigned char pieces[1][4][16] = {
-	{
-		{
-			0,0,0,0,
-			1,1,1,1,
-			0,0,0,0,
-			0,0,0,0,
-		},{
-			0,0,1,0,
-			0,0,1,0,
-			0,0,1,0,
-			0,0,1,0,
-		},{
-			0,0,0,0,
-			0,0,0,0,
-			1,1,1,1,
-			0,0,0,0,
-		},{
-			0,1,0,0,
-			0,1,0,0,
-			0,1,0,0,
-			0,1,0,0,
-		},
-	}
-};
-
 GLuint quad_prog, board_prog;
 
-mat4 proj = {0};
+mat4 proj_tx = {0};
 
 void update_proj() {
-	glm_ortho_default((float)WIN_W / WIN_H, &proj[0]);
-	SET_UNIFORM(quad_prog, u_proj_tx, glUniformMatrix4fv(_loc, 1, GL_FALSE, proj[0]))
-	SET_UNIFORM(board_prog, u_proj_tx, glUniformMatrix4fv(_loc, 1, GL_FALSE, proj[0]))
+	glm_ortho_default((float)WIN_W / WIN_H, &proj_tx[0]);
+	SET_UNIFORM(quad_prog, u_proj_tx, glUniformMatrix4fv(_loc, 1, GL_FALSE, proj_tx[0]))
+	SET_UNIFORM(board_prog, u_proj_tx, glUniformMatrix4fv(_loc, 1, GL_FALSE, proj_tx[0]))
 }
 
 GLFWwindow* window;
@@ -74,6 +49,8 @@ void on_framebuffer_size(GLFWwindow* window, int width, int height) {
 }
 
 int main () {
+	srand(time(0));
+
 	// GLFW
 	{
 		if (!glfwInit()) {
@@ -92,6 +69,7 @@ int main () {
 		}
 
 		glfwMakeContextCurrent(window);
+		// glfwSwapInterval(0); // remove vsync (60fps cap)
 		glfwSetKeyCallback(window, on_key);
 		glfwSetFramebufferSizeCallback(window, on_framebuffer_size);
 	}
@@ -115,38 +93,23 @@ int main () {
 
 	board_prog = load_program("shaders/board.vert", "shaders/board.frag");
 	quad_prog = load_program("shaders/quad.vert", "shaders/quad.frag");
-
-	board main_board = board_init(10, 20, board_prog, quad_prog);
-
-	// DEBUG BOARD
-	{
-		for (unsigned char row = 0; row < main_board.rows; row++) {
-			for (unsigned char col = 0; col < main_board.cols; col++) {
-				board_set_cell(main_board, col, row, (col+row) % 2);
-			}
-		}
-	}
-
+	game g = game_init(board_prog, quad_prog);
 	on_framebuffer_size(window, WIN_W, WIN_H);
 
-	{
-		mat4 board_tx = {0};
-		board_tx_matrix(main_board, &board_tx, (vec2){0, 0});
-		SET_UNIFORM(board_prog, u_board_tx, glUniformMatrix4fv(_loc, 1, GL_FALSE, board_tx[0]));
-		SET_UNIFORM(quad_prog, u_board_tx, glUniformMatrix4fv(_loc, 1, GL_FALSE, board_tx[0]));
-	}
-
-	board_init_vao(&main_board);
-	board_init_grid_vao(&main_board);
-
+	size_t frame = 0;
 	while (!glfwWindowShouldClose(window)) {
-		glClearColor(0.2, 0.4, 0.6, 1);
-    glClear(GL_COLOR_BUFFER_BIT);
+		if (glfwGetTime() > 1) {
+			glfwSetTime(0);
+			printf("fps: %lu\r", frame);
+			fflush(stdout);
+			frame = 0;
+		}
 
-		board_draw(main_board);
+		game_draw(g, frame);
 
     glfwSwapBuffers(window);
     glfwPollEvents();
+		frame++;
 	}
 
 	glfwTerminate();

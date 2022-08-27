@@ -1,9 +1,13 @@
 #ifndef OGL_UTIL_H
 #define OGL_UTIL_H
 
+#define __USE_POSIX199309
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdarg.h>
+#include <time.h>
+#include <errno.h>
 
 #include "GL/gl3w.h"
 
@@ -218,6 +222,18 @@ void APIENTRY ogl_on_message(
 		"%d: %s of %s severity, raised from %s: %s\n",
 		id, _type, _severity, _source, msg
 	);
+}
+
+void msleep(long msec) {
+	struct timespec ts;
+	int res;
+
+	ts.tv_sec = msec / 1000;
+	ts.tv_nsec = (msec % 1000) * 1000000;
+
+	do {
+		res = nanosleep(&ts, &ts);
+	} while (res && errno == EINTR);
 }
 
 #endif
