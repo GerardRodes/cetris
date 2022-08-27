@@ -29,6 +29,7 @@ typedef struct {
 		GLuint quads_vbo;
 		struct {
 			GLint ins_pos;
+			GLint ins_color;
 			GLint quad;
 		} a;
 	} gl_quad;
@@ -60,7 +61,6 @@ unsigned char board_get_cell(board b, unsigned char row, unsigned char col) {
 }
 
 int board_falling_overlaps_conflict(board b) {
-	// todo: not working
 	for (unsigned char row = 0; row < 4; row++) {
 		for (unsigned char col = 0; col < 4; col++) {
 			if (PIECE_DEC(b.falling.p)[row][col] == 0) {
@@ -70,11 +70,11 @@ int board_falling_overlaps_conflict(board b) {
 			const int board_row = b.falling.pos.row + row;
 			const int board_col = b.falling.pos.col + col;
 
-			if (board_col < 0 || board_row > b.rows) {
+			if (board_col < 0 || board_col >= b.cols) {
 				return 1;
 			}
 
-			if (board_row > b.rows) {
+			if (board_row >= b.rows) {
 				return 1;
 			}
 
@@ -85,27 +85,6 @@ int board_falling_overlaps_conflict(board b) {
 	}
 
 	return 0;
-}
-
-int board_falling_can_move_right(board* b) {
-	b->falling.pos.col++;
-	int can = board_falling_overlaps_conflict(*b);
-	b->falling.pos.col--;
-	return can;
-}
-
-int board_falling_can_move_down(board* b) {
-	b->falling.pos.row++;
-	int can = board_falling_overlaps_conflict(*b);
-	b->falling.pos.row--;
-	return can;
-}
-
-int board_falling_can_move_left(board* b) {
-	b->falling.pos.col--;
-	int can = board_falling_overlaps_conflict(*b);
-	b->falling.pos.col++;
-	return can;
 }
 
 int board_falling_rotate(board* b) {
@@ -142,9 +121,12 @@ void board_quads_pos(board b, unsigned char* out, unsigned int* out_len) {
 			if (board_get_cell(b, row, col) == 0) {
 				continue;
 			}
-			//todo: quad color
-			out[len*2] = col;
-			out[(len*2)+1] = row;
+			out[(len*6)+0] = col;  // x
+			out[(len*6)+1] = row;  // y
+			out[(len*6)+2] = 0xFF; // r
+			out[(len*6)+3] = 0xFF; // g
+			out[(len*6)+4] = 0xFF; // b
+			out[(len*6)+5] = 0xFF; // a
 			len++;
 		}
 	}
@@ -154,9 +136,12 @@ void board_quads_pos(board b, unsigned char* out, unsigned int* out_len) {
 		for (unsigned char row = 0; row < 4; row++) {
 			for (unsigned char col = 0; col < 4; col++) {
 				if (PIECE_DEC(b.falling.p)[row][col] != 0) {
-					//todo: quad color
-					out[len*2] = b.falling.pos.col + col;
-					out[(len*2)+1] = b.falling.pos.row + row;
+					out[(len*6)+0] = b.falling.pos.col + col;  // x
+					out[(len*6)+1] = b.falling.pos.row + row;  // y
+					out[(len*6)+2] = 0xFF; // r
+					out[(len*6)+3] = 0xFF; // g
+					out[(len*6)+4] = 0xFF; // b
+					out[(len*6)+5] = 0xFF; // a
 					len++;
 				}
 			}
@@ -229,16 +214,16 @@ void board_init_grid_vao(board* b) {
 	{
 		glGenBuffers(1, &b->gl_quad.quads_vbo);
 		glBindBuffer(GL_ARRAY_BUFFER, b->gl_quad.quads_vbo);
+		const unsigned int stride = (sizeof(char)*2) + sizeof(int);
 		{
-			glVertexAttribPointer(b->gl_quad.a.ins_pos, 2, GL_UNSIGNED_BYTE, GL_FALSE, 0, 0);
+			glVertexAttribPointer(b->gl_quad.a.ins_pos, 2, GL_UNSIGNED_BYTE, GL_FALSE, stride, (void*)0);
 			glEnableVertexAttribArray(b->gl_quad.a.ins_pos);
 			glVertexAttribDivisor(b->gl_quad.a.ins_pos, 1);
 		}
-		{
-			//todo: quad color
-		}
-		{
-			//todo: quad ghost?
+		{ // todo: not working :( maybe try to send unpacked first
+			glVertexAttribPointer(b->gl_quad.a.ins_color, 1, GL_UNSIGNED_INT, GL_FALSE, stride, (void*)(sizeof(char)*2));
+			glEnableVertexAttribArray(b->gl_quad.a.ins_color);
+			glVertexAttribDivisor(b->gl_quad.a.ins_color, 1);
 		}
 		glBindBuffer(GL_ARRAY_BUFFER, 0);
 		board_send_quads_pos(b);
@@ -270,35 +255,41 @@ void board_debug (board b, unsigned int mod) {
 }
 
 int board_falling_move_left(board* b) {
-	if (!board_falling_can_move_left(b)) {
+	b->falling.pos.col--;
+
+	if(board_falling_overlaps_conflict(*b)) {
+		b->falling.pos.col++;
 		return 0;
 	}
 
-	b->falling.pos.col--;
 	return 1;
 }
 
 int board_falling_move_right(board* b) {
-	if (!board_falling_can_move_right(b)) {
+	b->falling.pos.col++;
+
+	if(board_falling_overlaps_conflict(*b)) {
+		b->falling.pos.col--;
 		return 0;
 	}
 
-	b->falling.pos.col++;
 	return 1;
-}
-
-void board_falling_lock(board* b) {
-
 }
 
 // returns 1 if can move down, 0 if don't
 int board_falling_move_down(board* b) {
-	if (!board_falling_can_move_down(b)) {
+	b->falling.pos.row++;
+
+	if(board_falling_overlaps_conflict(*b)) {
+		b->falling.pos.col--;
 		return 0;
 	}
 
-	b->falling.pos.row++;
 	return 1; // true
+}
+
+void board_falling_lock(board* b) {
+
 }
 
 void board_tick (board* b, double t) {
@@ -315,7 +306,11 @@ board board_new (
 	GLuint quad_prog
 ) {
 	// todo: combine allocs
-	const unsigned int quads_cap = rows * cols * 2;
+	const unsigned int quads_max_cells = rows * cols;
+	const unsigned int quads_cap =
+		(quads_max_cells * 2 * sizeof(unsigned char)) + // coordinates
+		(quads_max_cells * sizeof(unsigned int)) 				// color
+	;
 	board b = {
 		.cols = cols,
 		.rows = rows,
@@ -330,7 +325,7 @@ board board_new (
 			.prog = quad_prog,
 			.vao = 0,
 			.quads_cap = quads_cap,
-			.quads_buf = calloc(quads_cap, sizeof(char)),
+			.quads_buf = calloc(quads_cap, 1),
 			.a = {
 				.ins_pos = -1,
 				.quad = -1,
@@ -348,6 +343,8 @@ board board_new (
 		assert(b.gl_board.a.pos != -1);
 	b.gl_quad.a.ins_pos = glGetAttribLocation(quad_prog, "a_ins_pos");
 		assert(b.gl_quad.a.ins_pos != -1);
+	b.gl_quad.a.ins_color = glGetAttribLocation(quad_prog, "a_ins_color");
+		assert(b.gl_quad.a.ins_color != -1);
 	b.gl_quad.a.quad = glGetAttribLocation(quad_prog, "a_quad");
 		assert(b.gl_quad.a.quad != -1);
 

@@ -1,7 +1,9 @@
-#version 330 core
+#version 400 core
+
+flat in uint ins_color;
 
 out vec4 color;
 
 void main() {
-	color = vec4(1.0f, 1.0f, 1.0f, 1.0f);
+	color = unpackUnorm4x8(ins_color);
 }
