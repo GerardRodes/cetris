@@ -5,6 +5,7 @@
 #include "GLFW/glfw3.h"
 #include "cglm/cglm.h"
 
+#include "piece.h"
 #include "util.h"
 #include "board.h"
 #include "game.h"
@@ -26,6 +27,7 @@ void update_proj() {
 }
 
 GLFWwindow* window;
+game g;
 
 void on_key (GLFWwindow* window, int key, int scancode, int action, int mods) {
 	if (action != GLFW_PRESS) {
@@ -35,6 +37,24 @@ void on_key (GLFWwindow* window, int key, int scancode, int action, int mods) {
 	switch (key) {
 	case GLFW_KEY_ESCAPE:
 		glfwSetWindowShouldClose(window, GLFW_TRUE);
+		break;
+	case GLFW_KEY_SPACE:
+		board_falling_rotate(&g.main_board);
+		break;
+	case GLFW_KEY_LEFT:
+		board_move_left(&g.main_board);
+		break;
+	case GLFW_KEY_RIGHT:
+		board_move_right(&g.main_board);
+		break;
+	case GLFW_KEY_UP:
+		board_move_lock(&g.main_board);
+		break;
+	case GLFW_KEY_DOWN:
+		board_move_down(&g.main_board);
+		break;
+	case GLFW_KEY_R:
+		board_falling_spawn(&g.main_board);
 		break;
 	}
 }
@@ -93,19 +113,20 @@ int main () {
 
 	board_prog = load_program("shaders/board.vert", "shaders/board.frag");
 	quad_prog = load_program("shaders/quad.vert", "shaders/quad.frag");
-	game g = game_init(board_prog, quad_prog);
+	g = game_init(board_prog, quad_prog);
 	on_framebuffer_size(window, WIN_W, WIN_H);
 
 	size_t frame = 0;
 	while (!glfwWindowShouldClose(window)) {
 		if (glfwGetTime() > 1) {
 			glfwSetTime(0);
-			printf("fps: %lu\r", frame);
-			fflush(stdout);
+			// printf("fps: %lu\r", frame);
+			// fflush(stdout);
 			frame = 0;
 		}
 
-		game_draw(g, frame);
+		game_tick(&g);
+		game_draw(&g, frame);
 
     glfwSwapBuffers(window);
     glfwPollEvents();

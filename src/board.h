@@ -8,9 +8,11 @@
 #include "GL/glcorearb.h"
 #include "cglm/cglm.h"
 
+#include "piece.h"
+
 typedef struct {
-	const unsigned char cols;
-	const unsigned char rows;
+	unsigned char cols;
+	unsigned char rows;
 	struct {
 		GLuint vao;
 		GLuint prog;
@@ -19,6 +21,9 @@ typedef struct {
 		} a;
 	} gl_board;
 	struct {
+		unsigned char* quads_buf;
+		unsigned int quads_cap;
+		unsigned int quads_len;
 		GLuint prog;
 		GLuint vao;
 		GLuint quads_vbo;
@@ -26,12 +31,53 @@ typedef struct {
 			GLint ins_pos;
 			GLint quad;
 		} a;
-		unsigned char* quads_buf;
-		unsigned int quads_cap;
-		unsigned int quads_len;
 	} gl_quad;
-	char* grid_buf;
+	char* grid_buf; // internal representation of grid
+
+	struct {
+		piece p;
+		int pos[2];
+		unsigned char decoded [4][4];
+		unsigned char left_most;
+		unsigned char right_most;
+	} falling;
 } board;
+
+void board_falling_set_limits(board* b) {
+	b->falling.left_most = 255;
+	b->falling.right_most = 0;
+	for (unsigned char row = 0; row < 4; row++) {
+		for (unsigned char col = 0; col < 4; col++) {
+			if (b->falling.decoded[row][col] == 0) {
+				continue;
+			}
+
+			if (col > b->falling.right_most) {
+				b->falling.right_most = col;
+			}
+
+			if (col < b->falling.left_most) {
+				b->falling.left_most = col;
+			}
+		}
+	}
+}
+
+void board_falling_spawn(board* b) {
+	b->falling.p = piece_random();
+
+	b->falling.pos[0] = b->cols / 2;
+	b->falling.pos[1] = 0;
+
+	piece_decode(b->falling.p, b->falling.decoded);
+	board_falling_set_limits(b);
+}
+
+void board_falling_rotate(board* b) {
+	piece_rotate(&b->falling.p);
+	piece_decode(b->falling.p, b->falling.decoded);
+	board_falling_set_limits(b);
+}
 
 void board_free (board b) {
 	free(b.grid_buf);
@@ -69,6 +115,27 @@ void board_quads_pos(board b, unsigned char* out, unsigned int* out_len) {
 			len++;
 		}
 	}
+
+	// add falling piece
+	{
+		for (unsigned char row = 0; row < 4; row++) {
+			for (unsigned char col = 0; col < 4; col++) {
+				if (b.falling.decoded[row][col] != 0) {
+					//todo: quad color
+					out[len*2] = b.falling.pos[0] + col;
+					out[(len*2)+1] = b.falling.pos[1] + row;
+					len++;
+				}
+			}
+		}
+	}
+
+	// add ghost piece
+	{
+
+	}
+
+
 	*out_len = len;
 }
 
@@ -78,6 +145,8 @@ void board_send_quads_pos(board* b) {
 
 	board_quads_pos(*b, b->gl_quad.quads_buf, &b->gl_quad.quads_len);
 	glBufferData(GL_ARRAY_BUFFER, b->gl_quad.quads_cap, b->gl_quad.quads_buf, GL_DYNAMIC_DRAW);
+	// todo: send only updated slice of the buffer
+	// https://registry.khronos.org/OpenGL-Refpages/gl4/html/glBufferSubData.xhtml
 
 	glBindBuffer(GL_ARRAY_BUFFER, 0);
 }
@@ -127,9 +196,17 @@ void board_init_grid_vao(board* b) {
 	{
 		glGenBuffers(1, &b->gl_quad.quads_vbo);
 		glBindBuffer(GL_ARRAY_BUFFER, b->gl_quad.quads_vbo);
+		{
 			glVertexAttribPointer(b->gl_quad.a.ins_pos, 2, GL_UNSIGNED_BYTE, GL_FALSE, 0, 0);
 			glEnableVertexAttribArray(b->gl_quad.a.ins_pos);
 			glVertexAttribDivisor(b->gl_quad.a.ins_pos, 1);
+		}
+		{
+			//todo: quad color
+		}
+		{
+			//todo: quad ghost?
+		}
 		glBindBuffer(GL_ARRAY_BUFFER, 0);
 		board_send_quads_pos(b);
 	}
@@ -159,7 +236,29 @@ void board_debug (board b, unsigned int mod) {
 	}
 }
 
+void board_move_left(board* b) {
+	if ((b->falling.pos[0] + b->falling.left_most) > 0) {
+		b->falling.pos[0]--;
+	}
+}
 
+void board_move_right(board* b) {
+	if ((b->falling.pos[0] - (3 - b->falling.right_most)) < b->cols-4) {
+		b->falling.pos[0]++;
+	}
+}
+
+void board_move_lock(board* b) {
+
+}
+
+void board_move_down(board* b) {
+
+}
+
+void board_tick (board* b) {
+
+}
 
 board board_init (
 	unsigned char cols,
@@ -168,7 +267,7 @@ board board_init (
 	GLuint quad_prog
 ) {
 	// todo: combine allocs
-	unsigned int quads_cap = rows * cols * 2;
+	const unsigned int quads_cap = rows * cols * 2;
 	board b = {
 		.cols = cols,
 		.rows = rows,
@@ -191,6 +290,9 @@ board board_init (
 		},
 		// internal representation in bytes of the tetris grid
 		.grid_buf = calloc(cols * rows, sizeof(char)),
+		.falling = {
+			.p = { .t = PT_NONE },
+		}
 	};
 
 	b.gl_board.a.pos = glGetAttribLocation(board_prog, "a_pos");

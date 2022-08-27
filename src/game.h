@@ -7,10 +7,9 @@
 
 typedef struct {
 	board main_board;
-	piece falling;
-	piece_t bag; // 8 == empty
-	board* opponents;
-	size_t score;
+	// board* opponents;
+	// size_t score;
+	// piece_t bag; // 8 == empty
 } game;
 
 game game_init(GLuint board_prog, GLuint quad_prog) {
@@ -23,18 +22,23 @@ game game_init(GLuint board_prog, GLuint quad_prog) {
 		SET_UNIFORM(quad_prog, u_board_tx, glUniformMatrix4fv(_loc, 1, GL_FALSE, board_tx[0]));
 	}
 
+	board_falling_spawn(&main_board);
+
 	return (game){
 		.main_board = main_board,
 	};
 }
 
-void game_draw(game g, size_t frame) {
+void game_tick(game* g) {
+	board_tick(&g->main_board);
+}
+
+void game_draw(game* g, size_t frame) {
 	glClearColor(0.2, 0.4, 0.6, 1);
 	glClear(GL_COLOR_BUFFER_BIT);
 
-	board_debug(g.main_board, frame % g.main_board.rows);
-	board_send_quads_pos(&g.main_board);
-	board_draw(g.main_board);
+	board_send_quads_pos(&g->main_board);
+	board_draw(g->main_board);
 }
 
 #endif

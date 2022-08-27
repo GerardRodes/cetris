@@ -5,13 +5,14 @@
 #include <stdlib.h>
 
 typedef enum {
-	T = 0,
-	S,
-	Z,
-	I,
-	J,
-	L,
-	O,
+	PT_T = 0,
+	PT_S,
+	PT_Z,
+	PT_I,
+	PT_J,
+	PT_L,
+	PT_O,
+	PT_NONE,
 } piece_t;
 
 typedef struct {
@@ -39,16 +40,15 @@ const unsigned int piece_color[7] = {
 	0xFF'FF'FF'FF, // 'O'
 };
 
-void piece_decode(piece p, unsigned char* out) {
+void piece_decode(piece p, unsigned char out[4][4]) {
 	unsigned int shape = pieces[p.t][p.rotation];
 
-	for (unsigned char y = 0; y < 4; y++) {
-		for (unsigned char x = 0; x < 4; x++) {
-			unsigned char* ptr = out + (y*4) + x;
-			if (shape & (0x8000 >> (y * 4 + x))) {
-				*ptr = piece_color[p.t];
+	for (unsigned char row = 0; row < 4; row++) {
+		for (unsigned char col = 0; col < 4; col++) {
+			if (shape & (0x8000 >> (row*4 + col))) {
+				out[row][col] = piece_color[p.t];
 			} else {
-				*ptr = 0;
+				out[row][col] = 0;
 			}
 		}
 	}
@@ -56,7 +56,7 @@ void piece_decode(piece p, unsigned char* out) {
 
 piece piece_random(){
 	return (piece){
-		.t = (piece_t)(rand() % (7 + 1)),
+		.t = (piece_t)(rand() % PT_NONE),
 		.rotation = 0,
 	};
 }
