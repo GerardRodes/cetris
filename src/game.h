@@ -12,8 +12,8 @@ typedef struct {
 	// piece_t bag; // 8 == empty
 } game;
 
-game game_init(GLuint board_prog, GLuint quad_prog) {
-	board main_board = board_init(10, 20, board_prog, quad_prog);
+game game_new(GLuint board_prog, GLuint quad_prog) {
+	board main_board = board_new(10, 20, board_prog, quad_prog);
 
 	{ // todo: store boards txs on array and provide them to shader
 		mat4 board_tx = {0};
@@ -29,11 +29,11 @@ game game_init(GLuint board_prog, GLuint quad_prog) {
 	};
 }
 
-void game_tick(game* g) {
-	board_tick(&g->main_board);
+void game_tick(game* g, double t) {
+	board_tick(&g->main_board, t);
 }
 
-void game_draw(game* g, size_t frame) {
+void game_draw(game* g) {
 	glClearColor(0.2, 0.4, 0.6, 1);
 	glClear(GL_COLOR_BUFFER_BIT);
 

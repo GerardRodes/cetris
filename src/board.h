@@ -36,47 +36,88 @@ typedef struct {
 
 	struct {
 		piece p;
-		int pos[2];
-		unsigned char decoded [4][4];
-		unsigned char left_most;
-		unsigned char right_most;
+		struct {
+			int row;
+			int col;
+		} pos;
+		double last_autofall;
 	} falling;
 } board;
-
-void board_falling_set_limits(board* b) {
-	b->falling.left_most = 255;
-	b->falling.right_most = 0;
-	for (unsigned char row = 0; row < 4; row++) {
-		for (unsigned char col = 0; col < 4; col++) {
-			if (b->falling.decoded[row][col] == 0) {
-				continue;
-			}
-
-			if (col > b->falling.right_most) {
-				b->falling.right_most = col;
-			}
-
-			if (col < b->falling.left_most) {
-				b->falling.left_most = col;
-			}
-		}
-	}
-}
 
 void board_falling_spawn(board* b) {
 	b->falling.p = piece_random();
 
-	b->falling.pos[0] = b->cols / 2;
-	b->falling.pos[1] = 0;
-
-	piece_decode(b->falling.p, b->falling.decoded);
-	board_falling_set_limits(b);
+	b->falling.pos.row = 0;
+	b->falling.pos.col = b->cols / 2;
 }
 
-void board_falling_rotate(board* b) {
+void board_set_cell(board b, unsigned char row, unsigned char col, unsigned char v) {
+	*(b.grid_buf+(row*b.cols)+col) = v;
+}
+
+unsigned char board_get_cell(board b, unsigned char row, unsigned char col) {
+	return *(b.grid_buf+(row*b.cols)+col);
+}
+
+int board_falling_overlaps_conflict(board b) {
+	// todo: not working
+	for (unsigned char row = 0; row < 4; row++) {
+		for (unsigned char col = 0; col < 4; col++) {
+			if (PIECE_DEC(b.falling.p)[row][col] == 0) {
+				continue;
+			}
+
+			const int board_row = b.falling.pos.row + row;
+			const int board_col = b.falling.pos.col + col;
+
+			if (board_col < 0 || board_row > b.rows) {
+				return 1;
+			}
+
+			if (board_row > b.rows) {
+				return 1;
+			}
+
+			if (board_get_cell(b, board_row, board_col) != 0) {
+				return 1;
+			}
+		}
+	}
+
+	return 0;
+}
+
+int board_falling_can_move_right(board* b) {
+	b->falling.pos.col++;
+	int can = board_falling_overlaps_conflict(*b);
+	b->falling.pos.col--;
+	return can;
+}
+
+int board_falling_can_move_down(board* b) {
+	b->falling.pos.row++;
+	int can = board_falling_overlaps_conflict(*b);
+	b->falling.pos.row--;
+	return can;
+}
+
+int board_falling_can_move_left(board* b) {
+	b->falling.pos.col--;
+	int can = board_falling_overlaps_conflict(*b);
+	b->falling.pos.col++;
+	return can;
+}
+
+int board_falling_rotate(board* b) {
+	const unsigned char prev_rotation = b->falling.p.rotation;
 	piece_rotate(&b->falling.p);
-	piece_decode(b->falling.p, b->falling.decoded);
-	board_falling_set_limits(b);
+
+	if (board_falling_overlaps_conflict(*b)) {
+		b->falling.p.rotation = prev_rotation;
+		return 0;
+	}
+
+	return 1;
 }
 
 void board_free (board b) {
@@ -94,19 +135,11 @@ void board_tx_matrix (board b, mat4* tx_matrix, vec2 center) {
 	glm_translate_y(tx_matrix[0], -((float)b.rows/2));
 }
 
-void board_set_cell(board b, unsigned char col, unsigned char row, unsigned char v) {
-	*(b.grid_buf+(row*b.cols)+col) = v;
-}
-
-unsigned char board_get_cell(board b, unsigned char col, unsigned char row) {
-	return *(b.grid_buf+(row*b.cols)+col);
-}
-
 void board_quads_pos(board b, unsigned char* out, unsigned int* out_len) {
 	unsigned int len = 0;
 	for (unsigned char row = 0; row < b.rows; row++) {
 		for (unsigned char col = 0; col < b.cols; col++) {
-			if (board_get_cell(b, col, row) == 0) {
+			if (board_get_cell(b, row, col) == 0) {
 				continue;
 			}
 			//todo: quad color
@@ -120,10 +153,10 @@ void board_quads_pos(board b, unsigned char* out, unsigned int* out_len) {
 	{
 		for (unsigned char row = 0; row < 4; row++) {
 			for (unsigned char col = 0; col < 4; col++) {
-				if (b.falling.decoded[row][col] != 0) {
+				if (PIECE_DEC(b.falling.p)[row][col] != 0) {
 					//todo: quad color
-					out[len*2] = b.falling.pos[0] + col;
-					out[(len*2)+1] = b.falling.pos[1] + row;
+					out[len*2] = b.falling.pos.col + col;
+					out[(len*2)+1] = b.falling.pos.row + row;
 					len++;
 				}
 			}
@@ -231,36 +264,51 @@ void board_draw (board b) {
 void board_debug (board b, unsigned int mod) {
 	for (unsigned int row = 0; row < b.rows; row++) {
 		for (unsigned int col = 0; col < b.cols; col++) {
-			board_set_cell(b, col, row, (col+row) % (mod+1));
+			board_set_cell(b, row, col, (col+row) % (mod+1));
 		}
 	}
 }
 
-void board_move_left(board* b) {
-	if ((b->falling.pos[0] + b->falling.left_most) > 0) {
-		b->falling.pos[0]--;
+int board_falling_move_left(board* b) {
+	if (!board_falling_can_move_left(b)) {
+		return 0;
+	}
+
+	b->falling.pos.col--;
+	return 1;
+}
+
+int board_falling_move_right(board* b) {
+	if (!board_falling_can_move_right(b)) {
+		return 0;
+	}
+
+	b->falling.pos.col++;
+	return 1;
+}
+
+void board_falling_lock(board* b) {
+
+}
+
+// returns 1 if can move down, 0 if don't
+int board_falling_move_down(board* b) {
+	if (!board_falling_can_move_down(b)) {
+		return 0;
+	}
+
+	b->falling.pos.row++;
+	return 1; // true
+}
+
+void board_tick (board* b, double t) {
+	if ((t - b->falling.last_autofall) > 1) {
+		board_falling_move_down(b);
+		b->falling.last_autofall = t;
 	}
 }
 
-void board_move_right(board* b) {
-	if ((b->falling.pos[0] - (3 - b->falling.right_most)) < b->cols-4) {
-		b->falling.pos[0]++;
-	}
-}
-
-void board_move_lock(board* b) {
-
-}
-
-void board_move_down(board* b) {
-
-}
-
-void board_tick (board* b) {
-
-}
-
-board board_init (
+board board_new (
 	unsigned char cols,
 	unsigned char rows,
 	GLuint board_prog,
@@ -292,6 +340,7 @@ board board_init (
 		.grid_buf = calloc(cols * rows, sizeof(char)),
 		.falling = {
 			.p = { .t = PT_NONE },
+			.last_autofall = 0,
 		}
 	};
 

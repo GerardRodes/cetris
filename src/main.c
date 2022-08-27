@@ -30,7 +30,7 @@ GLFWwindow* window;
 game g;
 
 void on_key (GLFWwindow* window, int key, int scancode, int action, int mods) {
-	if (action != GLFW_PRESS) {
+	if (action == GLFW_RELEASE) {
 		return;
 	}
 
@@ -42,16 +42,16 @@ void on_key (GLFWwindow* window, int key, int scancode, int action, int mods) {
 		board_falling_rotate(&g.main_board);
 		break;
 	case GLFW_KEY_LEFT:
-		board_move_left(&g.main_board);
+		board_falling_move_left(&g.main_board);
 		break;
 	case GLFW_KEY_RIGHT:
-		board_move_right(&g.main_board);
+		board_falling_move_right(&g.main_board);
 		break;
 	case GLFW_KEY_UP:
-		board_move_lock(&g.main_board);
+		board_falling_lock(&g.main_board);
 		break;
 	case GLFW_KEY_DOWN:
-		board_move_down(&g.main_board);
+		board_falling_move_down(&g.main_board);
 		break;
 	case GLFW_KEY_R:
 		board_falling_spawn(&g.main_board);
@@ -111,22 +111,19 @@ int main () {
 		glDebugMessageCallback(ogl_on_message, 0);
 	}
 
+	piece_init();
+
 	board_prog = load_program("shaders/board.vert", "shaders/board.frag");
 	quad_prog = load_program("shaders/quad.vert", "shaders/quad.frag");
-	g = game_init(board_prog, quad_prog);
+	g = game_new(board_prog, quad_prog);
 	on_framebuffer_size(window, WIN_W, WIN_H);
 
 	size_t frame = 0;
 	while (!glfwWindowShouldClose(window)) {
-		if (glfwGetTime() > 1) {
-			glfwSetTime(0);
-			// printf("fps: %lu\r", frame);
-			// fflush(stdout);
-			frame = 0;
-		}
+		double t = glfwGetTime();
 
-		game_tick(&g);
-		game_draw(&g, frame);
+		game_tick(&g, t);
+		game_draw(&g);
 
     glfwSwapBuffers(window);
     glfwPollEvents();
