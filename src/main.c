@@ -42,15 +42,19 @@ void on_key (GLFWwindow* window, int key, int scancode, int action, int mods) {
 		board_falling_rotate(&g.main_board);
 		break;
 	case GLFW_KEY_LEFT:
+	case GLFW_KEY_A:
 		board_falling_move_left(&g.main_board);
 		break;
 	case GLFW_KEY_RIGHT:
+	case GLFW_KEY_D:
 		board_falling_move_right(&g.main_board);
 		break;
 	case GLFW_KEY_UP:
+	case GLFW_KEY_W:
 		board_falling_lock(&g.main_board);
 		break;
 	case GLFW_KEY_DOWN:
+	case GLFW_KEY_S:
 		board_falling_move_down(&g.main_board);
 		break;
 	case GLFW_KEY_R:
@@ -80,9 +84,9 @@ int main () {
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, OGL_MINOR);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
-		glfwWindowHint(GLFW_FLOATING, GLFW_TRUE);
 		glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
-		window = glfwCreateWindow(WIN_W, WIN_H, "-ogl", NULL, NULL);
+
+		window = glfwCreateWindow(WIN_W, WIN_H, "[float] cetris", NULL, NULL);
 		if (!window) {
 			glfwTerminate();
 			panic("[GLFW] create window");
@@ -102,6 +106,11 @@ int main () {
 		if (!gl3wIsSupported(OGL_MAJOR, OGL_MINOR)) {
 			panic("[GL3W] opengl version not supported");
 		}
+
+		// todo: this enables blend on all buffers
+		//	but we only care about main framebuffer (maybe?)
+		glEnable(GL_BLEND);
+		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 	}
 
 	// DEBUG

@@ -22,8 +22,6 @@ game game_new(GLuint board_prog, GLuint quad_prog) {
 		SET_UNIFORM(quad_prog, u_board_tx, glUniformMatrix4fv(_loc, 1, GL_FALSE, board_tx[0]));
 	}
 
-	board_falling_spawn(&main_board);
-
 	return (game){
 		.main_board = main_board,
 	};

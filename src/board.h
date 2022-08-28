@@ -1,6 +1,7 @@
 #ifndef OGL_BOARD_H
 #define OGL_BOARD_H
 
+#include <stddef.h>
 #include <stdlib.h>
 #include <assert.h>
 
@@ -9,6 +10,14 @@
 #include "cglm/cglm.h"
 
 #include "piece.h"
+
+typedef struct {
+	unsigned int rgba;
+	struct {
+		unsigned char col;
+		unsigned char row;
+	} pos;
+} quads_vbo_attr;
 
 typedef struct {
 	unsigned char cols;
@@ -21,7 +30,7 @@ typedef struct {
 		} a;
 	} gl_board;
 	struct {
-		unsigned char* quads_buf;
+		quads_vbo_attr* quads_buf;
 		unsigned int quads_cap;
 		unsigned int quads_len;
 		GLuint prog;
@@ -33,13 +42,13 @@ typedef struct {
 			GLint quad;
 		} a;
 	} gl_quad;
-	char* grid_buf; // internal representation of grid
+	unsigned int* grid_buf; // internal representation of grid
 
 	struct {
 		piece p;
 		struct {
-			int row;
 			int col;
+			int row;
 		} pos;
 		double last_autofall;
 	} falling;
@@ -52,12 +61,12 @@ void board_falling_spawn(board* b) {
 	b->falling.pos.col = b->cols / 2;
 }
 
-void board_set_cell(board b, unsigned char row, unsigned char col, unsigned char v) {
-	*(b.grid_buf+(row*b.cols)+col) = v;
+void board_set_cell(board b, unsigned char row, unsigned char col, unsigned int v) {
+	b.grid_buf[(row*b.cols)+col] = v;
 }
 
-unsigned char board_get_cell(board b, unsigned char row, unsigned char col) {
-	return *(b.grid_buf+(row*b.cols)+col);
+unsigned int board_get_cell(board b, unsigned char row, unsigned char col) {
+	return b.grid_buf[(row*b.cols)+col];
 }
 
 int board_falling_overlaps_conflict(board b) {
@@ -114,45 +123,62 @@ void board_tx_matrix (board b, mat4* tx_matrix, vec2 center) {
 	glm_translate_y(tx_matrix[0], -((float)b.rows/2));
 }
 
-void board_quads_pos(board b, unsigned char* out, unsigned int* out_len) {
+void board_quads_pos(board b, quads_vbo_attr* out, unsigned int* out_len) {
 	unsigned int len = 0;
 	for (unsigned char row = 0; row < b.rows; row++) {
 		for (unsigned char col = 0; col < b.cols; col++) {
 			if (board_get_cell(b, row, col) == 0) {
 				continue;
 			}
-			out[(len*6)+0] = col;  // x
-			out[(len*6)+1] = row;  // y
-			out[(len*6)+2] = 0xFF; // r
-			out[(len*6)+3] = 0xFF; // g
-			out[(len*6)+4] = 0xFF; // b
-			out[(len*6)+5] = 0xFF; // a
+			out[len].pos.col = col;
+			out[len].pos.row = row;
+			out[len].rgba = 0xFF'FF'FF'FF;
 			len++;
 		}
 	}
 
-	// add falling piece
+	if (b.falling.p.t == PT_NONE) {
+		return;
+	}
+
+	// add ghost piece
 	{
+		int initial_row = b.falling.pos.row;
+		while (!board_falling_overlaps_conflict(b)) {
+			b.falling.pos.row++;
+		}
+		unsigned char ghost_row = b.falling.pos.row-1;
+		unsigned char ghost_col = b.falling.pos.col;
+		b.falling.pos.row = initial_row;
+
 		for (unsigned char row = 0; row < 4; row++) {
 			for (unsigned char col = 0; col < 4; col++) {
 				if (PIECE_DEC(b.falling.p)[row][col] != 0) {
-					out[(len*6)+0] = b.falling.pos.col + col;  // x
-					out[(len*6)+1] = b.falling.pos.row + row;  // y
-					out[(len*6)+2] = 0xFF; // r
-					out[(len*6)+3] = 0xFF; // g
-					out[(len*6)+4] = 0xFF; // b
-					out[(len*6)+5] = 0xFF; // a
+					const unsigned int board_row = ghost_row + row;
+					const unsigned int board_col = ghost_col + col;
+					out[len].pos.row = board_row;
+					out[len].pos.col = board_col;
+					// replace alpha channel
+					out[len].rgba = (piece_color[b.falling.p.t] & ~0xFF'00'00'00) | 0x44'00'00'00;
 					len++;
 				}
 			}
 		}
 	}
 
-	// add ghost piece
-	{
-
+	// add falling piece
+	for (unsigned char row = 0; row < 4; row++) {
+		for (unsigned char col = 0; col < 4; col++) {
+			if (PIECE_DEC(b.falling.p)[row][col] != 0) {
+				const unsigned int board_row = b.falling.pos.row + row;
+				const unsigned int board_col = b.falling.pos.col + col;
+				out[len].pos.row = board_row;
+				out[len].pos.col = board_col;
+				out[len].rgba = piece_color[b.falling.p.t];
+				len++;
+			}
+		}
 	}
-
 
 	*out_len = len;
 }
@@ -183,7 +209,7 @@ void board_init_vao(board* b) {
 		GLuint vtx_vbo;
 		glGenBuffers(1, &vtx_vbo);
 		glBindBuffer(GL_ARRAY_BUFFER, vtx_vbo);
-		glBufferData(GL_ARRAY_BUFFER, sizeof(board_vtx), board_vtx, GL_STATIC_DRAW);
+		glBufferData(GL_ARRAY_BUFFER, sizeof(board_vtx), board_vtx, GL_DYNAMIC_DRAW);
 		{
 			glVertexAttribPointer(b->gl_board.a.pos, 2, GL_FLOAT, GL_FALSE, 0, 0);
 			glEnableVertexAttribArray(b->gl_board.a.pos);
@@ -214,16 +240,15 @@ void board_init_grid_vao(board* b) {
 	{
 		glGenBuffers(1, &b->gl_quad.quads_vbo);
 		glBindBuffer(GL_ARRAY_BUFFER, b->gl_quad.quads_vbo);
-		const unsigned int stride = (sizeof(char)*2) + sizeof(int);
-		{
-			glVertexAttribPointer(b->gl_quad.a.ins_pos, 2, GL_UNSIGNED_BYTE, GL_FALSE, stride, (void*)0);
-			glEnableVertexAttribArray(b->gl_quad.a.ins_pos);
-			glVertexAttribDivisor(b->gl_quad.a.ins_pos, 1);
-		}
 		{ // todo: not working :( maybe try to send unpacked first
-			glVertexAttribPointer(b->gl_quad.a.ins_color, 1, GL_UNSIGNED_INT, GL_FALSE, stride, (void*)(sizeof(char)*2));
 			glEnableVertexAttribArray(b->gl_quad.a.ins_color);
+			glVertexAttribIPointer(b->gl_quad.a.ins_color, 1, GL_UNSIGNED_INT, sizeof(quads_vbo_attr), (void*)offsetof(quads_vbo_attr, rgba));
 			glVertexAttribDivisor(b->gl_quad.a.ins_color, 1);
+		}
+		{
+			glEnableVertexAttribArray(b->gl_quad.a.ins_pos);
+			glVertexAttribIPointer(b->gl_quad.a.ins_pos, 2, GL_UNSIGNED_BYTE, sizeof(quads_vbo_attr), (void*)offsetof(quads_vbo_attr, pos));
+			glVertexAttribDivisor(b->gl_quad.a.ins_pos, 1);
 		}
 		glBindBuffer(GL_ARRAY_BUFFER, 0);
 		board_send_quads_pos(b);
@@ -281,7 +306,7 @@ int board_falling_move_down(board* b) {
 	b->falling.pos.row++;
 
 	if(board_falling_overlaps_conflict(*b)) {
-		b->falling.pos.col--;
+		b->falling.pos.row--;
 		return 0;
 	}
 
@@ -293,10 +318,14 @@ void board_falling_lock(board* b) {
 }
 
 void board_tick (board* b, double t) {
-	if ((t - b->falling.last_autofall) > 1) {
+
+	if (b->falling.p.t == PT_NONE) {
+		board_falling_spawn(b);
+	} else if ((t - b->falling.last_autofall) > 1) {
 		board_falling_move_down(b);
 		b->falling.last_autofall = t;
 	}
+
 }
 
 board board_new (
@@ -306,11 +335,7 @@ board board_new (
 	GLuint quad_prog
 ) {
 	// todo: combine allocs
-	const unsigned int quads_max_cells = rows * cols;
-	const unsigned int quads_cap =
-		(quads_max_cells * 2 * sizeof(unsigned char)) + // coordinates
-		(quads_max_cells * sizeof(unsigned int)) 				// color
-	;
+	const unsigned int quads_cap = rows * cols * sizeof(quads_vbo_attr);
 	board b = {
 		.cols = cols,
 		.rows = rows,
@@ -332,7 +357,7 @@ board board_new (
 			}
 		},
 		// internal representation in bytes of the tetris grid
-		.grid_buf = calloc(cols * rows, sizeof(char)),
+		.grid_buf = calloc(cols * rows, sizeof(unsigned int)),
 		.falling = {
 			.p = { .t = PT_NONE },
 			.last_autofall = 0,
@@ -341,6 +366,7 @@ board board_new (
 
 	b.gl_board.a.pos = glGetAttribLocation(board_prog, "a_pos");
 		assert(b.gl_board.a.pos != -1);
+
 	b.gl_quad.a.ins_pos = glGetAttribLocation(quad_prog, "a_ins_pos");
 		assert(b.gl_quad.a.ins_pos != -1);
 	b.gl_quad.a.ins_color = glGetAttribLocation(quad_prog, "a_ins_color");

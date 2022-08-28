@@ -5,7 +5,6 @@
 #include <stdlib.h>
 
 #define PIECE_DEC(p) pieces_decoded[p.t][p.rotation]
-#define PIECE_LIM(p) pieces_limits[p.t][p.rotation]
 
 typedef enum {
 	PT_T = 0,
@@ -23,21 +22,7 @@ typedef struct {
 	unsigned char rotation;
 } piece;
 
-typedef struct {
-	unsigned char row;
-	unsigned char col;
-} rwcl;
-
-
-typedef struct {
-	rwcl left;
-	rwcl right;
-	rwcl down;
-	rwcl up;
-} piece_limits;
-
-piece_limits pieces_limits[7][4];
-unsigned char pieces_decoded[7][4][4][4] = {0};
+unsigned int pieces_decoded[7][4][4][4] = {0};
 const unsigned int pieces[7][4] = {
   { 0x4640, 0x0E40, 0x4C40, 0x4E00 }, // 'T'
   { 0x8C40, 0x6C00, 0x8C40, 0x6C00 }, // 'S'
@@ -49,63 +34,25 @@ const unsigned int pieces[7][4] = {
 };
 
 const unsigned int piece_color[7] = {
-	0xFF'FF'FF'FF, // 'T'
-	0xFF'FF'FF'FF, // 'S'
-	0xFF'FF'FF'FF, // 'Z'
-	0xFF'FF'FF'FF, // 'I'
-	0xFF'FF'FF'FF, // 'J'
-	0xFF'FF'FF'FF, // 'L'
-	0xFF'FF'FF'FF, // 'O'
+	//AA'BB'GG'RR
+	0xFF'FF'00'99, // 'T'
+	0xFF'00'FF'00, // 'S'
+	0xFF'00'00'FF, // 'Z'
+	0xFF'FF'FF'00, // 'I'
+	0xFF'FF'00'00, // 'J'
+	0xFF'00'AA'FF, // 'L'
+	0xFF'00'FF'FF, // 'O'
 };
 
-void piece_decode_rotation(piece_t t, unsigned char rotation, unsigned char out[4][4]) {
-	unsigned int shape = pieces[t][rotation];
-
-	for (unsigned char row = 0; row < 4; row++) {
-		for (unsigned char col = 0; col < 4; col++) {
-			if (shape & (0x8000 >> (row*4 + col))) {
-				out[row][col] = piece_color[t];
-			} else {
-				out[row][col] = 0;
-			}
-		}
-	}
-}
-
 void piece_init() {
-	for (unsigned char p = 0; p < 7; p++) {
-		for (unsigned char r = 0; r < 7; r++) {
-			piece_decode_rotation(p, r, pieces_decoded[p][r]);
-
-			pieces_limits[p][r].left.col = 255;
-			pieces_limits[p][r].right.col = 0;
-			pieces_limits[p][r].up.row = 0;
-			pieces_limits[p][r].down.row = 255;
-
+	for (unsigned char p = 0; p < PT_NONE; p++) {
+		for (unsigned char r = 0; r < 4; r++) {
 			for (unsigned char row = 0; row < 4; row++) {
 				for (unsigned char col = 0; col < 4; col++) {
-					if (pieces_decoded[p][r][row][col] == 0) {
-						continue;
-					}
-
-					if (col > pieces_limits[p][r].right.col) {
-						pieces_limits[p][r].right.row = row;
-						pieces_limits[p][r].right.col = col;
-					}
-
-					if (col < pieces_limits[p][r].left.col) {
-						pieces_limits[p][r].left.row = row;
-						pieces_limits[p][r].left.col = col;
-					}
-
-					if (row > pieces_limits[p][r].up.row) {
-						pieces_limits[p][r].up.row = row;
-						pieces_limits[p][r].up.col = col;
-					}
-
-					if (row < pieces_limits[p][r].down.row) {
-						pieces_limits[p][r].down.row = row;
-						pieces_limits[p][r].down.col = col;
+					if (pieces[p][r] & (0x8000 >> (row*4 + col))) {
+						pieces_decoded[p][r][row][col] = piece_color[p];
+					} else {
+						pieces_decoded[p][r][row][col] = 0;
 					}
 				}
 			}

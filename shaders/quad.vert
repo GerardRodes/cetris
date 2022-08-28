@@ -1,7 +1,7 @@
 #version 400 core
 
 in vec2 a_quad;
-in vec2 a_ins_pos;
+in uvec2 a_ins_pos;
 in uint a_ins_color;
 
 uniform mat4 u_proj_tx;
