@@ -39,7 +39,7 @@ void on_key (GLFWwindow* window, int key, int scancode, int action, int mods) {
 		glfwSetWindowShouldClose(window, GLFW_TRUE);
 		break;
 	case GLFW_KEY_SPACE:
-		board_falling_rotate(&g.main_board);
+		board_falling_lock(&g.main_board);
 		break;
 	case GLFW_KEY_LEFT:
 	case GLFW_KEY_A:
@@ -51,7 +51,7 @@ void on_key (GLFWwindow* window, int key, int scancode, int action, int mods) {
 		break;
 	case GLFW_KEY_UP:
 	case GLFW_KEY_W:
-		board_falling_lock(&g.main_board);
+		board_falling_rotate(&g.main_board);
 		break;
 	case GLFW_KEY_DOWN:
 	case GLFW_KEY_S:

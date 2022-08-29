@@ -13,11 +13,11 @@ typedef struct {
 } game;
 
 game game_new(GLuint board_prog, GLuint quad_prog) {
-	board main_board = board_new(10, 20, board_prog, quad_prog);
+	board main_board = board_new(10, 10, board_prog, quad_prog);
 
 	{ // todo: store boards txs on array and provide them to shader
 		mat4 board_tx = {0};
-		board_tx_matrix(main_board, &board_tx, (vec2){0, 0});
+		board_tx_matrix(&main_board, &board_tx, (vec2){0, 0});
 		SET_UNIFORM(board_prog, u_board_tx, glUniformMatrix4fv(_loc, 1, GL_FALSE, board_tx[0]));
 		SET_UNIFORM(quad_prog, u_board_tx, glUniformMatrix4fv(_loc, 1, GL_FALSE, board_tx[0]));
 	}
@@ -36,7 +36,7 @@ void game_draw(game* g) {
 	glClear(GL_COLOR_BUFFER_BIT);
 
 	board_send_quads_pos(&g->main_board);
-	board_draw(g->main_board);
+	board_draw(&g->main_board);
 }
 
 #endif

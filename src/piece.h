@@ -62,7 +62,7 @@ void piece_init() {
 
 piece piece_random(){
 	return (piece){
-		.t = (piece_t)(rand() % PT_NONE),
+		.t = PT_O, //(piece_t)(rand() % PT_NONE),
 		.rotation = 0,
 	};
 }
