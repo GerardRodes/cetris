@@ -19,11 +19,11 @@ typedef enum {
 
 typedef struct {
 	piece_t t;
-	unsigned char rotation;
+	uint8_t rotation;
 } piece;
 
-unsigned int pieces_decoded[7][4][4][4] = {0};
-const unsigned int pieces[7][4] = {
+uint32_t pieces_decoded[7][4][4][4] = {0};
+const uint32_t pieces[7][4] = {
   { 0x4640, 0x0E40, 0x4C40, 0x4E00 }, // 'T'
   { 0x8C40, 0x6C00, 0x8C40, 0x6C00 }, // 'S'
   { 0x4C80, 0xC600, 0x4C80, 0xC600 }, // 'Z'
@@ -33,7 +33,7 @@ const unsigned int pieces[7][4] = {
   { 0xCC00, 0xCC00, 0xCC00, 0xCC00 }  // 'O'
 };
 
-const unsigned int piece_color[7] = {
+const uint32_t piece_color[7] = {
 	//AA'BB'GG'RR
 	0xFF'FF'00'99, // 'T'
 	0xFF'00'FF'00, // 'S'
@@ -45,10 +45,10 @@ const unsigned int piece_color[7] = {
 };
 
 void piece_init() {
-	for (unsigned char p = 0; p < PT_NONE; p++) {
-		for (unsigned char r = 0; r < 4; r++) {
-			for (unsigned char row = 0; row < 4; row++) {
-				for (unsigned char col = 0; col < 4; col++) {
+	for (uint8_t p = 0; p < PT_NONE; p++) {
+		for (uint8_t r = 0; r < 4; r++) {
+			for (uint8_t row = 0; row < 4; row++) {
+				for (uint8_t col = 0; col < 4; col++) {
 					if (pieces[p][r] & (0x8000 >> (row*4 + col))) {
 						pieces_decoded[p][r][row][col] = piece_color[p];
 					} else {
@@ -62,7 +62,7 @@ void piece_init() {
 
 piece piece_random(){
 	return (piece){
-		.t = PT_O, //(piece_t)(rand() % PT_NONE),
+		.t = (piece_t)(rand() % PT_NONE),
 		.rotation = 0,
 	};
 }

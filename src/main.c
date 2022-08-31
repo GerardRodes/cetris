@@ -1,3 +1,4 @@
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -18,49 +19,132 @@ size_t WIN_H = 500;
 
 GLuint quad_prog, board_prog;
 
-mat4 proj_tx = {0};
-
-void update_proj() {
-	glm_ortho_default((float)WIN_W / WIN_H, &proj_tx[0]);
-	SET_UNIFORM(quad_prog, u_proj_tx, glUniformMatrix4fv(_loc, 1, GL_FALSE, proj_tx[0]))
-	SET_UNIFORM(board_prog, u_proj_tx, glUniformMatrix4fv(_loc, 1, GL_FALSE, proj_tx[0]))
-}
-
 GLFWwindow* window;
 game g;
 
 void on_key (GLFWwindow* window, int key, int scancode, int action, int mods) {
-	if (action == GLFW_RELEASE) {
-		return;
+	if (action == GLFW_PRESS) {
+		// oneshot keystrokes
+		switch (key) {
+			case GLFW_KEY_ESCAPE:
+				glfwSetWindowShouldClose(window, GLFW_TRUE);
+				break;
+			case GLFW_KEY_SPACE:
+				board_falling_lock(&g.main_board);
+				break;
+			case GLFW_KEY_UP:
+				board_falling_rotate(&g.main_board);
+				break;
+			// =========================
+			// DEBUG
+			// =========================
+			case GLFW_KEY_R:
+				board_falling_spawn(&g.main_board);
+				break;
+			case GLFW_KEY_PERIOD:
+				g.main_board.falling.p.t = (g.main_board.falling.p.t+1) % PT_NONE;
+				break;
+			case GLFW_KEY_COMMA:
+				g.main_board.falling.p.t = (g.main_board.falling.p.t-1) % PT_NONE;
+				break;
+			case GLFW_KEY_1:
+				g.main_board.falling.p.t = PT_T;
+				break;
+			case GLFW_KEY_2:
+				g.main_board.falling.p.t = PT_S;
+				break;
+			case GLFW_KEY_3:
+				g.main_board.falling.p.t = PT_Z;
+				break;
+			case GLFW_KEY_4:
+				g.main_board.falling.p.t = PT_I;
+				break;
+			case GLFW_KEY_5:
+				g.main_board.falling.p.t = PT_J;
+				break;
+			case GLFW_KEY_6:
+				g.main_board.falling.p.t = PT_L;
+				break;
+			case GLFW_KEY_7:
+				g.main_board.falling.p.t = PT_O;
+				break;
+		}
 	}
 
-	switch (key) {
-	case GLFW_KEY_ESCAPE:
-		glfwSetWindowShouldClose(window, GLFW_TRUE);
-		break;
-	case GLFW_KEY_SPACE:
-		board_falling_lock(&g.main_board);
-		break;
-	case GLFW_KEY_LEFT:
-	case GLFW_KEY_A:
-		board_falling_move_left(&g.main_board);
-		break;
-	case GLFW_KEY_RIGHT:
-	case GLFW_KEY_D:
-		board_falling_move_right(&g.main_board);
-		break;
-	case GLFW_KEY_UP:
-	case GLFW_KEY_W:
-		board_falling_rotate(&g.main_board);
-		break;
-	case GLFW_KEY_DOWN:
-	case GLFW_KEY_S:
-		board_falling_move_down(&g.main_board);
-		break;
-	case GLFW_KEY_R:
-		board_falling_spawn(&g.main_board);
-		break;
+	if (action == GLFW_PRESS || action == GLFW_RELEASE) {
+		switch (key) {
+			case GLFW_KEY_LEFT:
+				if (action == GLFW_PRESS) {
+					g.input.piece.move.left = 1;
+				} else {
+					g.input.piece.move.left = 0;
+					g.input.piece.last.left = 0;
+				}
+				break;
+			case GLFW_KEY_RIGHT:
+				if (action == GLFW_PRESS) {
+					g.input.piece.move.right = 1;
+				} else {
+					g.input.piece.move.right = 0;
+					g.input.piece.last.right = 0;
+				}
+				break;
+			case GLFW_KEY_DOWN:
+				if (action == GLFW_PRESS) {
+					g.input.piece.move.down = 1;
+				} else {
+					g.input.piece.move.down = 0;
+					g.input.piece.last.down = 0;
+				}
+				break;
+			// =========================
+			// CAMERA
+			// =========================
+			case GLFW_KEY_A:
+				if (action == GLFW_PRESS) {
+					g.input.camera.move.left = 1;
+				} else {
+					g.input.camera.move.left = 0;
+				}
+				break;
+			case GLFW_KEY_D:
+				if (action == GLFW_PRESS) {
+					g.input.camera.move.right = 1;
+				} else {
+					g.input.camera.move.right = 0;
+				}
+				break;
+			case GLFW_KEY_W:
+				if (action == GLFW_PRESS) {
+					g.input.camera.move.up = 1;
+				} else {
+					g.input.camera.move.up = 0;
+				}
+				break;
+			case GLFW_KEY_S:
+				if (action == GLFW_PRESS) {
+					g.input.camera.move.down = 1;
+				} else {
+					g.input.camera.move.down = 0;
+				}
+				break;
+			case GLFW_KEY_Q:
+				if (action == GLFW_PRESS) {
+					g.input.camera.move.backward = 1;
+				} else {
+					g.input.camera.move.backward = 0;
+				}
+				break;
+			case GLFW_KEY_E:
+				if (action == GLFW_PRESS) {
+					g.input.camera.move.forward = 1;
+				} else {
+					g.input.camera.move.forward = 0;
+				}
+				break;
+		}
 	}
+
 }
 
 void on_framebuffer_size(GLFWwindow* window, int width, int height) {
@@ -69,7 +153,7 @@ void on_framebuffer_size(GLFWwindow* window, int width, int height) {
 	// make sure the viewport matches the new window dimensions; note that width and
 	// height will be significantly larger than specified on retina displays.
 	glViewport(0, 0, width, height);
-	update_proj();
+	game_update_tx_matrix_uniforms(&g, WIN_W, WIN_H);
 }
 
 int main () {
@@ -106,11 +190,6 @@ int main () {
 		if (!gl3wIsSupported(OGL_MAJOR, OGL_MINOR)) {
 			panic("[GL3W] opengl version not supported");
 		}
-
-		// todo: this enables blend on all buffers
-		//	but we only care about main framebuffer (maybe?)
-		glEnable(GL_BLEND);
-		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 	}
 
 	// DEBUG
@@ -128,15 +207,22 @@ int main () {
 	on_framebuffer_size(window, WIN_W, WIN_H);
 
 	size_t frame = 0;
+	double prev_t = 0;
 	while (!glfwWindowShouldClose(window)) {
 		double t = glfwGetTime();
+		double dt = t - prev_t;
 
-		game_tick(&g, t);
-		game_draw(&g);
+		{
+			game_tick(&g, t, dt);
+			game_draw(&g);
+		}
+		{
+			glfwSwapBuffers(window);
+			glfwPollEvents();
+		}
 
-    glfwSwapBuffers(window);
-    glfwPollEvents();
 		frame++;
+		prev_t = t;
 	}
 
 	glfwTerminate();
