@@ -7,6 +7,7 @@
 #include "cglm/cglm.h"
 
 #include "piece.h"
+#include "text.h"
 #include "util.h"
 #include "board.h"
 #include "game.h"
@@ -200,6 +201,7 @@ int main () {
 	}
 
 	piece_init();
+	text_init();
 
 	board_prog = load_program("shaders/board.vert", "shaders/board.frag");
 	quad_prog = load_program("shaders/quad.vert", "shaders/quad.frag");

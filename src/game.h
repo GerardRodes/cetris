@@ -162,13 +162,15 @@ void game_tick(game* g, double t, double dt) {
 }
 
 void game_draw(game* g) {
+	glEnable(GL_FRAMEBUFFER_SRGB);
+
 	// todo: this enables blend on all buffers
 	//	but we only care about main framebuffer (maybe?)
 	glEnable(GL_BLEND);
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 	glEnable(GL_DEPTH_TEST);
 
-	glClearColor(0.2, 0.4, 0.6, 1);
+	glClearColor(0., 0., 0., 1);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 	board_draw(&g->main_board);
