@@ -72,12 +72,8 @@ void game_update_tx_matrix_uniforms(game* g, float win_width, float win_height) 
 
 	// todo: store boards txs on array and provide them to shader
 	glm_mat4_identity(g->tx_matrix.board);
-	board_tx_matrix(&g->main_board, g->tx_matrix.board, 0);
+	board_tx_matrix(&g->main_board, g->tx_matrix.board);
 	SET_UNIFORM(g->main_board.gl_board.prog, u_model_tx, glUniformMatrix4fv(_loc, 1, GL_FALSE, g->tx_matrix.board[0]));
-
-	glm_mat4_identity(g->tx_matrix.cube);
-	board_cube_tx_matrix(&g->main_board, g->tx_matrix.cube);
-	SET_UNIFORM(g->main_board.gl_quad.prog, u_model_tx, glUniformMatrix4fv(_loc, 1, GL_FALSE, g->tx_matrix.cube[0]));
 }
 game game_new(GLuint board_prog, GLuint quad_prog) {
 	game g = {
@@ -163,10 +159,6 @@ void game_tick(game* g, double t, double dt) {
 	}
 
 	board_tick(&g->main_board, t);
-
-	glm_mat4_identity(g->tx_matrix.board);
-	board_tx_matrix(&g->main_board, g->tx_matrix.board, fmod(t*100, 360));
-	SET_UNIFORM(g->main_board.gl_board.prog, u_model_tx, glUniformMatrix4fv(_loc, 1, GL_FALSE, g->tx_matrix.board[0]));
 }
 
 void game_draw(game* g) {
@@ -179,7 +171,6 @@ void game_draw(game* g) {
 	glClearColor(0.2, 0.4, 0.6, 1);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-	board_send_quads_pos(&g->main_board);
 	board_draw(&g->main_board);
 }
 

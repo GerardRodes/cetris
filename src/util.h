@@ -1,6 +1,7 @@
 #ifndef OGL_UTIL_H
 #define OGL_UTIL_H
 
+#include <math.h>
 #define __USE_POSIX199309
 
 #include <stdio.h>
@@ -234,6 +235,23 @@ void msleep(long msec) {
 	do {
 		res = nanosleep(&ts, &ts);
 	} while (res && errno == EINTR);
+}
+
+float lerp(float start, float end, float t) {
+	return (1-t)*start + t*end;
+}
+
+float normalize(float min, float max, float v) {
+	return (v-min)/(max-min);
+}
+
+float bezier3(float p0, float p1, float p2, float p3, float t) {
+	return
+		powf(1-t, 3)*p0 +
+		3*powf(1-t, 2)*t*p1 +
+		3*(1-t)*powf(t, 2)*p2 +
+		powf(t, 3)*p3
+	;
 }
 
 #endif
