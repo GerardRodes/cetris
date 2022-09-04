@@ -58,7 +58,15 @@ typedef struct {
 	} falling;
 	uint32_t* grid_buf; // internal representation of grid
 	struct {
-		float* bounce;
+		struct {
+			double dt;
+			uint8_t duration;
+			uint8_t running;
+			struct {
+				uint8_t start;
+				uint8_t end;
+			} row;
+		} clear;
 	} animation;
 	uint32_t score;
 } board;
@@ -169,7 +177,6 @@ int board_falling_rotate(board* b) {
 void board_free (board* b) {
 	free(b->grid_buf);
 	free(b->gl_quad.quads_buf);
-	free(b->animation.bounce);
 }
 
 void board_tx_matrix (board* b, mat4 tx_matrix) { // todo: center to position the board
@@ -186,120 +193,6 @@ void board_cube_tx_matrix (board* b, mat4 tx_matrix) {
 	glm_scale(tx_matrix, (vec3){board_scale_factor,-board_scale_factor,board_scale_factor});
 	glm_translate_x(tx_matrix, -(b->cols*0.5));
 	glm_translate_y(tx_matrix, -(b->rows*0.5));
-}
-
-void board_animate_quad_bounce(board* b, double t) {
-	for (uint8_t row = 0; row < b->rows; row++) {
-		for (uint8_t col = 0; col < b->cols; col++) {
-			b->animation.bounce[row*b->cols + col] += 0.01;
-			if (b->animation.bounce[row*b->cols + col] > 1) {
-				b->animation.bounce[row*b->cols + col] = 0;
-			}
-		}
-	}
-}
-
-void board_animation_quad_bounce(board* b, mat4 tx, uint8_t col, uint8_t row) {
-	float p = b->animation.bounce[row*b->cols + col];
-	p = bezier3(0, 1, 9, 10, p);
-	// float p = b->animation.bounce[row*b->cols + col];
-
-	// printf("%f\n", p);
-	// if (p < 0.5) {
-	// 	p = lerp(0, 2, normalize(0, 0.5, p));
-	// } else {
-	// 	p = lerp(2, 0, normalize(0.5, 1, p));
-	// }
-
-	glm_translate_y(tx, -1*p);
-}
-
-
-void board_quads_vbo_attrs(board* b, quads_vbo_attr* out, uint32_t* out_len) {
-	uint32_t len = 0;
-	for (uint8_t row = 0; row < b->rows; row++) {
-		for (uint8_t col = 0; col < b->cols; col++) {
-			const uint32_t color = board_get_cell(b, row, col);
-			if (color == 0) {
-				continue;
-			}
-
-			glm_mat4_identity(out[len].model_tx);
-			board_cube_tx_matrix(b, out[len].model_tx);
-			glm_translate(out[len].model_tx, (vec3){col, row, 0});
-
-			board_animation_quad_bounce(b, out[len].model_tx, col, row);
-
-			out[len].rgba = color;
-			len++;
-		}
-	}
-
-	if (b->falling.p.t == PT_NONE) {
-		return;
-	}
-
-	// add ghost piece
-	{
-		int initial_row = b->falling.pos.row;
-		while (!board_falling_overlaps_conflict(b)) {
-			b->falling.pos.row++;
-		}
-		uint8_t ghost_row = b->falling.pos.row-1;
-		uint8_t ghost_col = b->falling.pos.col;
-		b->falling.pos.row = initial_row;
-
-		for (uint8_t row = 0; row < 4; row++) {
-			for (uint8_t col = 0; col < 4; col++) {
-				const uint32_t color = PIECE_DEC(b->falling.p)[row][col];
-				if (color == 0) {
-					continue;
-				}
-				const uint32_t board_row = ghost_row + row;
-				const uint32_t board_col = ghost_col + col;
-
-				glm_mat4_identity(out[len].model_tx);
-				board_cube_tx_matrix(b, out[len].model_tx);
-				glm_translate(out[len].model_tx, (vec3){board_col, board_row, 0});
-				// replace alpha channel
-				out[len].rgba = (color & ~0xFF'00'00'00) | 0x44'00'00'00;
-				len++;
-			}
-		}
-	}
-
-	// add falling piece
-	for (uint8_t row = 0; row < 4; row++) {
-		for (uint8_t col = 0; col < 4; col++) {
-			const uint32_t color = PIECE_DEC(b->falling.p)[row][col];
-			if (color == 0) {
-				continue;
-			}
-			const uint32_t board_row = b->falling.pos.row + row;
-			const uint32_t board_col = b->falling.pos.col + col;
-
-			glm_mat4_identity(out[len].model_tx);
-			board_cube_tx_matrix(b, out[len].model_tx);
-			glm_translate(out[len].model_tx, (vec3){board_col, board_row, 0});
-
-			out[len].rgba = color;
-			len++;
-		}
-	}
-
-	*out_len = len;
-}
-
-void board_send_quads_pos(board* b) {
-	assert(b->gl_quad.quads_vbo != 0);
-	glBindBuffer(GL_ARRAY_BUFFER, b->gl_quad.quads_vbo);
-
-	board_quads_vbo_attrs(b, b->gl_quad.quads_buf, &b->gl_quad.quads_len);
-	glBufferData(GL_ARRAY_BUFFER, b->gl_quad.quads_cap, b->gl_quad.quads_buf, GL_DYNAMIC_DRAW);
-	// todo: send only updated slice of the buffer
-	// https://registry.khronos.org/OpenGL-Refpages/gl4/html/glBufferSubData.xhtml
-
-	glBindBuffer(GL_ARRAY_BUFFER, 0);
 }
 
 void board_init_vao(board* b) {
@@ -404,24 +297,6 @@ void board_init_grid_vao(board* b) {
 	glBindVertexArray(0);
 }
 
-void board_draw (board* b) {
-	{
-		glUseProgram(b->gl_board.prog);
-		glBindVertexArray(b->gl_board.vao);
-		glLineWidth(5);
-		glDrawArrays(GL_LINE_LOOP, 0, 4);
-		glLineWidth(1);
-		glUseProgram(0);
-	}
-	{
-		board_send_quads_pos(b);
-		glUseProgram(b->gl_quad.prog);
-		glBindVertexArray(b->gl_quad.vao);
-		glDrawArraysInstanced(GL_TRIANGLES, 0, 3*2*6, (int)b->gl_quad.quads_len);
-		glUseProgram(0);
-	}
-}
-
 void board_debug (board* b, uint32_t mod) {
 	for (uint32_t row = 0; row < b->rows; row++) {
 		for (uint32_t col = 0; col < b->cols; col++) {
@@ -475,6 +350,52 @@ void board_clear_rows(board* b, uint8_t start, uint8_t end) {
 	printf("score: %d | lvl: %d | falltime: %f\n", b->score, board_level(b), board_autofall_time(b));
 }
 
+void board_animation_clear_rows_apply(board* b, mat4 tx, uint32_t* rgba, uint8_t col, uint8_t row) {
+	float p = normalize(0, b->animation.clear.duration, b->animation.clear.dt);
+
+	float col_r = normalize(0, b->cols, col);
+
+	if (
+		row >= b->animation.clear.row.start &&
+		row <= b->animation.clear.row.end
+	) {
+		float row_r = normalize(b->animation.clear.row.start, b->animation.clear.row.end+1, row);
+
+		float n = clamp(0, 255, 255*p*1.2);
+		uint32_t alpha = (uint8_t)(255 - n) << (3*8);
+		*rgba = ((*rgba) & ~0xFF'00'00'00) | alpha;
+
+		p = bezier3(0, -5*col_r, 10*row_r, 40, p);
+		p *= -1;
+		glm_translate_z(tx, p);
+	} else if (
+		row < b->animation.clear.row.start
+	) {
+		if (p < 0.5) return;
+		p = normalize(0.5, 1, p);
+		float row_r = normalize(0, b->animation.clear.row.start-1, row);
+		float rows_to_move = b->animation.clear.row.end - b->animation.clear.row.start + 1;
+		p = bezier3(0, 0.8*col_r, 0.9*row_r, rows_to_move, p);
+		glm_translate_y(tx, p);
+	}
+}
+
+void board_animation_clear_rows_run(board* b, double dt) {
+	if (b->animation.clear.dt > b->animation.clear.duration) {
+		board_clear_rows(b, b->animation.clear.row.start, b->animation.clear.row.end);
+		b->animation.clear.running = 0;
+	} else {
+		b->animation.clear.dt += dt;
+	}
+}
+
+void board_animation_clear_rows_start(board* b, uint8_t start, uint8_t end) {
+	b->animation.clear.row.start = start;
+	b->animation.clear.row.end = end;
+	b->animation.clear.running = 1;
+	b->animation.clear.dt = 0;
+}
+
 void board_falling_lock(board* b) {
 	if (b->falling.p.t == PT_NONE) {
 		return;
@@ -513,7 +434,8 @@ void board_falling_lock(board* b) {
 		for (uint8_t col = 0; col < b->cols; col++) {
 			if (board_get_cell(b, row, col) == 0) {
 				if (start != -1) {
-					board_clear_rows(b, (int8_t)start, row-1);
+					board_animation_clear_rows_start(b, (int8_t)start, row-1);
+					// board_clear_rows(b, (int8_t)start, row-1);
 					start = -1;
 				}
 				goto outer;
@@ -527,13 +449,98 @@ void board_falling_lock(board* b) {
 		outer:;
 	}
 	if (start != -1) {
-		board_clear_rows(b, (int8_t)start, b->rows-1);
+		board_animation_clear_rows_start(b, (int8_t)start, b->rows-1);
+		// board_clear_rows(b, (int8_t)start, b->rows-1);
 	}
 
 	b->falling.p.t = PT_NONE;
 }
 
-void board_tick (board* b, double t) {
+void board_quads_vbo_attrs(board* b, quads_vbo_attr* out, uint32_t* out_len) {
+	uint32_t len = 0;
+	for (uint8_t row = 0; row < b->rows; row++) {
+		for (uint8_t col = 0; col < b->cols; col++) {
+			const uint32_t color = board_get_cell(b, row, col);
+			if (color == 0) {
+				continue;
+			}
+
+			glm_mat4_identity(out[len].model_tx);
+			board_cube_tx_matrix(b, out[len].model_tx);
+			glm_translate(out[len].model_tx, (vec3){col, row, 0});
+			out[len].rgba = color;
+
+			// todo: this should bw out of this loop
+			// I would need to have a dedicated vbo for model matrix
+			if (b->animation.clear.running) {
+				board_animation_clear_rows_apply(b, out[len].model_tx, &out[len].rgba, col, row);
+			}
+
+			len++;
+		}
+	}
+
+	if (b->falling.p.t == PT_NONE) {
+		return;
+	}
+
+	// add ghost piece
+	{
+		int initial_row = b->falling.pos.row;
+		while (!board_falling_overlaps_conflict(b)) {
+			b->falling.pos.row++;
+		}
+		int16_t ghost_row = b->falling.pos.row-1;
+		int16_t ghost_col = b->falling.pos.col;
+		b->falling.pos.row = initial_row;
+
+		for (uint8_t row = 0; row < 4; row++) {
+			for (uint8_t col = 0; col < 4; col++) {
+				const uint32_t color = PIECE_DEC(b->falling.p)[row][col];
+				if (color == 0) {
+					continue;
+				}
+				const uint32_t board_row = ghost_row + row;
+				const uint32_t board_col = ghost_col + col;
+
+				glm_mat4_identity(out[len].model_tx);
+				board_cube_tx_matrix(b, out[len].model_tx);
+				glm_translate(out[len].model_tx, (vec3){board_col, board_row, 0});
+				// replace alpha channel
+				out[len].rgba = (color & ~0xFF'00'00'00) | 0x44'00'00'00;
+				len++;
+			}
+		}
+	}
+
+	// add falling piece
+	for (uint8_t row = 0; row < 4; row++) {
+		for (uint8_t col = 0; col < 4; col++) {
+			const uint32_t color = PIECE_DEC(b->falling.p)[row][col];
+			if (color == 0) {
+				continue;
+			}
+			const uint32_t board_row = b->falling.pos.row + row;
+			const uint32_t board_col = b->falling.pos.col + col;
+
+			glm_mat4_identity(out[len].model_tx);
+			board_cube_tx_matrix(b, out[len].model_tx);
+			glm_translate(out[len].model_tx, (vec3){board_col, board_row, 0});
+
+			out[len].rgba = color;
+			len++;
+		}
+	}
+
+	*out_len = len;
+}
+
+void board_tick (board* b, double t, double dt) {
+	if (b->animation.clear.running) {
+		board_animation_clear_rows_run(b, dt);
+		return;
+	}
+
 	if (b->falling.p.t == PT_NONE) {
 		board_falling_spawn(b);
 	} else if ((t - b->falling.last_autofall) > board_autofall_time(b)) {
@@ -544,8 +551,36 @@ void board_tick (board* b, double t) {
 			board_falling_lock(b);
 		}
 	}
+}
 
-	board_animate_quad_bounce(b, t);
+void board_send_quads_pos(board* b) {
+	assert(b->gl_quad.quads_vbo != 0);
+	glBindBuffer(GL_ARRAY_BUFFER, b->gl_quad.quads_vbo);
+
+	board_quads_vbo_attrs(b, b->gl_quad.quads_buf, &b->gl_quad.quads_len);
+	glBufferData(GL_ARRAY_BUFFER, b->gl_quad.quads_cap, b->gl_quad.quads_buf, GL_DYNAMIC_DRAW);
+	// todo: send only updated slice of the buffer
+	// https://registry.khronos.org/OpenGL-Refpages/gl4/html/glBufferSubData.xhtml
+
+	glBindBuffer(GL_ARRAY_BUFFER, 0);
+}
+
+void board_draw (board* b) {
+	{
+		glUseProgram(b->gl_board.prog);
+		glBindVertexArray(b->gl_board.vao);
+		glLineWidth(5);
+		glDrawArrays(GL_LINE_LOOP, 0, 4);
+		glLineWidth(1);
+		glUseProgram(0);
+	}
+	{
+		board_send_quads_pos(b);
+		glUseProgram(b->gl_quad.prog);
+		glBindVertexArray(b->gl_quad.vao);
+		glDrawArraysInstanced(GL_TRIANGLES, 0, 3*2*6, (int)b->gl_quad.quads_len);
+		glUseProgram(0);
+	}
 }
 
 board board_new (
@@ -583,7 +618,10 @@ board board_new (
 			.last_autofall = 0,
 		},
 		.animation = {
-			.bounce = calloc(cols * rows, sizeof(float)),
+			.clear = {
+				.running = 0,
+				.duration = 1,
+			},
 		},
 		.score = 0,
 	};

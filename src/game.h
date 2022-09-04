@@ -158,7 +158,7 @@ void game_tick(game* g, double t, double dt) {
 		}
 	}
 
-	board_tick(&g->main_board, t);
+	board_tick(&g->main_board, t, dt);
 }
 
 void game_draw(game* g) {

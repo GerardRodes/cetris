@@ -241,10 +241,22 @@ float lerp(float start, float end, float t) {
 	return (1-t)*start + t*end;
 }
 
+float clamp(float min, float max, float v) {
+	if (v > max) {
+		return max;
+	}
+	if (v < min) {
+		return min;
+	}
+
+	return v;
+}
+
 float normalize(float min, float max, float v) {
 	return (v-min)/(max-min);
 }
 
+// https://en.wikipedia.org/wiki/B%C3%A9zier_curve#Cubic_B%C3%A9zier_curves
 float bezier3(float p0, float p1, float p2, float p3, float t) {
 	return
 		powf(1-t, 3)*p0 +
