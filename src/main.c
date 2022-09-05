@@ -203,6 +203,8 @@ int main () {
 	piece_init();
 	text_init();
 
+	text info_text = text_new(0, 0, 16, 0xFF'FF'FF'FF, 0x33'33'33'CC);
+
 	board_prog = load_program("shaders/board.vert", "shaders/board.frag");
 	quad_prog = load_program("shaders/quad.vert", "shaders/quad.frag");
 	g = game_new(board_prog, quad_prog);
@@ -214,9 +216,12 @@ int main () {
 		double t = glfwGetTime();
 		double dt = t - prev_t;
 
+		text_set(&info_text, "hola %d", 10);
+
 		{
 			game_tick(&g, t, dt);
 			game_draw(&g);
+			text_draw(&info_text);
 		}
 		{
 			glfwSwapBuffers(window);
