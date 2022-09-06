@@ -1,6 +1,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <time.h>
 
 #include "GL/gl3w.h"
 #include "GLFW/glfw3.h"
@@ -15,13 +16,17 @@
 #define OGL_MAJOR 3
 #define OGL_MINOR 3
 
-size_t WIN_W = 500;
-size_t WIN_H = 500;
+uint32_t WIN_W = 1920*0.5;
+uint32_t WIN_H = 1080*0.5;
 
 GLuint quad_prog, board_prog;
 
 GLFWwindow* window;
 game g;
+
+text board_text;
+text prof_text;
+uint8_t DRAW_PROF_TEXT = 0;
 
 void on_key (GLFWwindow* window, int key, int scancode, int action, int mods) {
 	if (action == GLFW_PRESS) {
@@ -68,6 +73,18 @@ void on_key (GLFWwindow* window, int key, int scancode, int action, int mods) {
 				break;
 			case GLFW_KEY_7:
 				g.main_board.falling.p.t = PT_O;
+				break;
+			case GLFW_KEY_F1:
+				glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+				break;
+			case GLFW_KEY_F2:
+				glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+				break;
+			case GLFW_KEY_F3:
+				glPolygonMode(GL_FRONT_AND_BACK, GL_POINT);
+				break;
+			case GLFW_KEY_F12:
+				DRAW_PROF_TEXT = !DRAW_PROF_TEXT;
 				break;
 		}
 	}
@@ -155,6 +172,8 @@ void on_framebuffer_size(GLFWwindow* window, int width, int height) {
 	// height will be significantly larger than specified on retina displays.
 	glViewport(0, 0, width, height);
 	game_update_tx_matrix_uniforms(&g, WIN_W, WIN_H);
+	text_set_win(WIN_W, WIN_H);
+	board_text.x = WIN_W-(16*7);
 }
 
 int main () {
@@ -202,33 +221,79 @@ int main () {
 
 	piece_init();
 	text_init();
-
-	text info_text = text_new(0, 0, 16, 0xFF'FF'FF'FF, 0x33'33'33'CC);
+	text_set_win(WIN_W, WIN_H);
 
 	board_prog = load_program("shaders/board.vert", "shaders/board.frag");
 	quad_prog = load_program("shaders/quad.vert", "shaders/quad.frag");
 	g = game_new(board_prog, quad_prog);
 	on_framebuffer_size(window, WIN_W, WIN_H);
 
-	size_t frame = 0;
+	board_text = text_new(WIN_W-(16*7), 0, 16, 0xFF'FF'FF'FF, 0xAA'00'00'00);
+	prof_text = text_new(10, 10, 16*1.25, 0xFF'FF'FF'FF, 0xAA'00'00'00);
+
 	double prev_t = 0;
+	double second = 0;
+	uint32_t fps = 0;
+	uint32_t fps_c = 0;
 	while (!glfwWindowShouldClose(window)) {
+		clock_t frame_begin = clock();
+
 		double t = glfwGetTime();
 		double dt = t - prev_t;
 
-		text_set(&info_text, "hola %d", 10);
-
 		{
-			game_tick(&g, t, dt);
-			game_draw(&g);
-			text_draw(&info_text);
+			second += dt;
+			if (second >= 1.0) {
+				fps = fps_c;
+				second = 0;
+				fps_c = 0;
+			} else {
+				fps_c++;
+			}
 		}
+
+		double game_tick_time, game_draw_time;
+		{
+			text_set(&board_text, "level\n%d\nscore\n%d\nspeed\n%.2f", board_level(&g.main_board), g.main_board.score, board_autofall_time(&g.main_board));
+			{
+				clock_t begin = clock();
+				game_tick(&g, t, dt);
+				clock_t end = clock();
+				game_tick_time = (double)(end - begin) / CLOCKS_PER_SEC;
+			}
+			{
+				clock_t begin = clock();
+				game_draw(&g);
+				clock_t end = clock();
+				game_draw_time = (double)(end - begin) / CLOCKS_PER_SEC;
+			}
+			{
+				if (DRAW_PROF_TEXT) {
+					text_draw(&prof_text);
+				}
+				text_draw(&board_text);
+			}
+		}
+
 		{
 			glfwSwapBuffers(window);
 			glfwPollEvents();
 		}
 
-		frame++;
+		clock_t frame_end = clock();
+		double frame_time = (double)(frame_end - frame_begin) / CLOCKS_PER_SEC;
+		text_set(
+			&prof_text,
+			"FPS %d\n"
+			"ms %.2f\n"
+			"frame: %f\n"
+			"-tick: %f\n"
+			"-draw: %f\n"
+			, fps, dt*1000,
+			frame_time,
+			game_tick_time,
+			game_draw_time
+		);
 		prev_t = t;
 	}
 

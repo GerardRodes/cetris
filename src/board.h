@@ -15,6 +15,7 @@
 
 #include "piece.h"
 #include "util.h"
+#include "cube.h"
 
 #define QUAD_POINTS 4
 
@@ -43,8 +44,9 @@ typedef struct {
 		GLuint quads_vbo;
 		struct {
 			GLint model_tx;
-			GLint ins_color;
+			GLint color;
 			GLint quad;
+			GLint normal;
 		} a;
 	} gl_quad;
 
@@ -73,16 +75,11 @@ typedef struct {
 
 
 uint32_t board_level(board* b) {
-	return b->score / 1000;
+	return (b->score / 1000)+1;
 }
 
 double board_autofall_time(board* b) {
-	return
-		1.0 /
-		(
-			((board_level(b)+1)+1) / 4.0
-		)
-	;
+	return 1.0 / board_level(b);
 }
 
 void board_set_cell(board* b, uint8_t row, uint8_t col, uint32_t v) {
@@ -228,53 +225,14 @@ void board_init_grid_vao(board* b) {
 	glBindVertexArray(b->gl_quad.vao);
 	// quad vtxs
 	{
-    static const float cube_vtx[] = {
-			0.05f, 0.05f, 0.05f,
-			0.05f, 0.05f, 0.95f,
-			0.05f, 0.95f, 0.95f,
-			0.95f, 0.95f, 0.05f,
-			0.05f, 0.05f, 0.05f,
-			0.05f, 0.95f, 0.05f,
-			0.95f, 0.05f, 0.95f,
-			0.05f, 0.05f, 0.05f,
-			0.95f, 0.05f, 0.05f,
-			0.95f, 0.95f, 0.05f,
-			0.95f, 0.05f, 0.05f,
-			0.05f, 0.05f, 0.05f,
-			0.05f, 0.05f, 0.05f,
-			0.05f, 0.95f, 0.95f,
-			0.05f, 0.95f, 0.05f,
-			0.95f, 0.05f, 0.95f,
-			0.05f, 0.05f, 0.95f,
-			0.05f, 0.05f, 0.05f,
-			0.05f, 0.95f, 0.95f,
-			0.05f, 0.05f, 0.95f,
-			0.95f, 0.05f, 0.95f,
-			0.95f, 0.95f, 0.95f,
-			0.95f, 0.05f, 0.05f,
-			0.95f, 0.95f, 0.05f,
-			0.95f, 0.05f, 0.05f,
-			0.95f, 0.95f, 0.95f,
-			0.95f, 0.05f, 0.95f,
-			0.95f, 0.95f, 0.95f,
-			0.95f, 0.95f, 0.05f,
-			0.05f, 0.95f, 0.05f,
-			0.95f, 0.95f, 0.95f,
-			0.05f, 0.95f, 0.05f,
-			0.05f, 0.95f, 0.95f,
-			0.95f, 0.95f, 0.95f,
-			0.05f, 0.95f, 0.95f,
-			0.95f, 0.05f, 0.95f
-    };
-
-		GLuint vtx_vbo;
-		glGenBuffers(1, &vtx_vbo);
-		glBindBuffer(GL_ARRAY_BUFFER, vtx_vbo);
-		glBufferData(GL_ARRAY_BUFFER, sizeof(cube_vtx), cube_vtx, GL_STATIC_DRAW);
-		{
-			glVertexAttribPointer(b->gl_quad.a.quad, 3, GL_FLOAT, GL_FALSE, 0, 0);
-			glEnableVertexAttribArray(b->gl_quad.a.quad);
-		}
+		GLuint vbo;
+		glGenBuffers(1, &vbo);
+		glBindBuffer(GL_ARRAY_BUFFER, vbo);
+		glBufferData(GL_ARRAY_BUFFER, sizeof(cube_data), cube_data, GL_STATIC_DRAW);
+			glVertexAttribPointer(b->gl_quad.a.quad, 3, GL_FLOAT, GL_FALSE, sizeof(float)*6, (void*)0);
+				glEnableVertexAttribArray(b->gl_quad.a.quad);
+			glVertexAttribPointer(b->gl_quad.a.normal, 3, GL_FLOAT, GL_FALSE, sizeof(float)*6, (void*)(sizeof(float)*3));
+				glEnableVertexAttribArray(b->gl_quad.a.normal);
 		glBindBuffer(GL_ARRAY_BUFFER, 0);
 	}
 	// quads positions in grid
@@ -282,9 +240,9 @@ void board_init_grid_vao(board* b) {
 		glGenBuffers(1, &b->gl_quad.quads_vbo);
 		glBindBuffer(GL_ARRAY_BUFFER, b->gl_quad.quads_vbo);
 		{ // todo: not working :( maybe try to send unpacked first
-			glEnableVertexAttribArray(b->gl_quad.a.ins_color);
-			glVertexAttribIPointer(b->gl_quad.a.ins_color, 1, GL_UNSIGNED_INT, sizeof(quads_vbo_attr), (void*)offsetof(quads_vbo_attr, rgba));
-			glVertexAttribDivisor(b->gl_quad.a.ins_color, 1);
+			glEnableVertexAttribArray(b->gl_quad.a.color);
+			glVertexAttribIPointer(b->gl_quad.a.color, 1, GL_UNSIGNED_INT, sizeof(quads_vbo_attr), (void*)offsetof(quads_vbo_attr, rgba));
+			glVertexAttribDivisor(b->gl_quad.a.color, 1);
 		}
 		// a mat4 attribute has to be initialized as 4 vec4
 		for (uint8_t i = 0; i < 4; i++) {
@@ -340,14 +298,14 @@ int board_falling_move_down(board* b) {
 }
 
 void board_clear_rows(board* b, uint8_t start, uint8_t end) {
-	const uint32_t cells_to_del = (end-start+1)*b->cols;
+	uint32_t lines = end-start+1;
+	const uint32_t cells_to_del = lines*b->cols;
 	const uint32_t cells_to_mov = start*b->cols;
 	memmove(&b->grid_buf[cells_to_del], &b->grid_buf[0], cells_to_mov*sizeof(uint32_t));
 	memset(b->grid_buf, 0, cells_to_del*sizeof(uint32_t));
 
 	// scoring
-	b->score += cells_to_del * QUAD_POINTS * (board_level(b)+1);
-	printf("score: %d | lvl: %d | falltime: %f\n", b->score, board_level(b), board_autofall_time(b));
+	b->score += (uint32_t)((((float)lines+1)/2) * cells_to_del * QUAD_POINTS * board_level(b));
 }
 
 void board_animation_clear_rows_apply(board* b, mat4 tx, uint32_t* rgba, uint8_t col, uint8_t row) {
@@ -484,6 +442,25 @@ void board_quads_vbo_attrs(board* b, quads_vbo_attr* out, uint32_t* out_len) {
 		return;
 	}
 
+	// add falling piece
+	for (uint8_t row = 0; row < 4; row++) {
+		for (uint8_t col = 0; col < 4; col++) {
+			const uint32_t color = PIECE_DEC(b->falling.p)[row][col];
+			if (color == 0) {
+				continue;
+			}
+			const uint32_t board_row = b->falling.pos.row + row;
+			const uint32_t board_col = b->falling.pos.col + col;
+
+			glm_mat4_identity(out[len].model_tx);
+			board_cube_tx_matrix(b, out[len].model_tx);
+			glm_translate(out[len].model_tx, (vec3){board_col, board_row, 0});
+
+			out[len].rgba = color;
+			len++;
+		}
+	}
+
 	// add ghost piece
 	{
 		int initial_row = b->falling.pos.row;
@@ -510,25 +487,6 @@ void board_quads_vbo_attrs(board* b, quads_vbo_attr* out, uint32_t* out_len) {
 				out[len].rgba = (color & ~0xFF'00'00'00) | 0x44'00'00'00;
 				len++;
 			}
-		}
-	}
-
-	// add falling piece
-	for (uint8_t row = 0; row < 4; row++) {
-		for (uint8_t col = 0; col < 4; col++) {
-			const uint32_t color = PIECE_DEC(b->falling.p)[row][col];
-			if (color == 0) {
-				continue;
-			}
-			const uint32_t board_row = b->falling.pos.row + row;
-			const uint32_t board_col = b->falling.pos.col + col;
-
-			glm_mat4_identity(out[len].model_tx);
-			board_cube_tx_matrix(b, out[len].model_tx);
-			glm_translate(out[len].model_tx, (vec3){board_col, board_row, 0});
-
-			out[len].rgba = color;
-			len++;
 		}
 	}
 
@@ -633,16 +591,15 @@ board board_new (
 
 	b.gl_quad.a.model_tx = glGetAttribLocation(quad_prog, "a_model_tx");
 		assert(b.gl_quad.a.model_tx != -1);
-	b.gl_quad.a.ins_color = glGetAttribLocation(quad_prog, "a_ins_color");
-		assert(b.gl_quad.a.ins_color != -1);
+	b.gl_quad.a.color = glGetAttribLocation(quad_prog, "a_color");
+		assert(b.gl_quad.a.color != -1);
 	b.gl_quad.a.quad = glGetAttribLocation(quad_prog, "a_quad");
 		assert(b.gl_quad.a.quad != -1);
+	b.gl_quad.a.normal = glGetAttribLocation(quad_prog, "a_normal");
+		assert(b.gl_quad.a.normal != -1);
 
 	board_init_vao(&b);
 	board_init_grid_vao(&b);
-
-	printf("score: %d | falltime: %f\n", b.score, board_autofall_time(&b));
-
 	return b;
 }
 

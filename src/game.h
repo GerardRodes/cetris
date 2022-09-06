@@ -7,6 +7,7 @@
 #include "board.h"
 #include "piece.h"
 #include "util.h"
+#include "text.h"
 
 typedef struct {
 	board main_board;
