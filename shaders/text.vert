@@ -6,14 +6,13 @@ in int a_line;
 in int a_ascii_code;
 
 uniform mat4 u_proj_tx;
-
 uniform float u_win_w;
 uniform float u_win_h;
 uniform float u_x;
 uniform float u_y;
 uniform float u_font_size;
 
-out vec2 uv;
+out vec2 _uv;
 
 float tex_dim_xy = 16;
 float char_w = 1.0 / tex_dim_xy;
@@ -30,5 +29,5 @@ void main() {
 
 	float u = (char_w*a_quad.x) + (char_w * mod(a_ascii_code, tex_dim_xy));
 	float v = (char_h*a_quad.y) + (char_h * floor(a_ascii_code / tex_dim_xy));
-	uv = vec2(u, v*-1);
+	_uv = vec2(u, v*-1);
 }

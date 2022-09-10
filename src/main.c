@@ -2,24 +2,22 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
-
 #include "GL/gl3w.h"
 #include "GLFW/glfw3.h"
 #include "cglm/cglm.h"
-
 #include "piece.h"
 #include "text.h"
 #include "util.h"
 #include "board.h"
 #include "game.h"
+#include "light.h"
+#include "prog.h"
 
 #define OGL_MAJOR 3
 #define OGL_MINOR 3
 
 uint32_t WIN_W = 1920*0.5;
 uint32_t WIN_H = 1080*0.5;
-
-GLuint quad_prog, board_prog;
 
 GLFWwindow* window;
 game g;
@@ -219,13 +217,14 @@ int main () {
 		glDebugMessageCallback(ogl_on_message, 0);
 	}
 
+	prog_init();
+	light_init();
 	piece_init();
 	text_init();
+
 	text_set_win(WIN_W, WIN_H);
 
-	board_prog = load_program("shaders/board.vert", "shaders/board.frag");
-	quad_prog = load_program("shaders/quad.vert", "shaders/quad.frag");
-	g = game_new(board_prog, quad_prog);
+	g = game_new();
 	on_framebuffer_size(window, WIN_W, WIN_H);
 
 	board_text = text_new(WIN_W-(16*7), 0, 16, 0xFF'FF'FF'FF, 0xAA'00'00'00);
@@ -266,6 +265,10 @@ int main () {
 				game_draw(&g);
 				clock_t end = clock();
 				game_draw_time = (double)(end - begin) / CLOCKS_PER_SEC;
+			}
+			{
+				light_tick(t);
+				light_draw();
 			}
 			{
 				if (DRAW_PROF_TEXT) {

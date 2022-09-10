@@ -2,13 +2,9 @@
 #define OGL_UTIL_H
 
 #include <math.h>
-#define __USE_POSIX199309
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdarg.h>
-#include <time.h>
-#include <errno.h>
 
 #include "GL/gl3w.h"
 
@@ -18,7 +14,7 @@ if (_prog != 0) {\
 	glUseProgram(_prog);\
 	GLint _loc = glGetUniformLocation(_prog, #_name);\
 	if (_loc == -1) {\
-		fprintf(stderr, "uniform " #_name " not found\n");\
+		fprintf(stderr, "uniform " #_name " not found for prog " #_prog "\n");\
 	} else {\
 		_cb;\
 	}\
@@ -223,18 +219,6 @@ void APIENTRY ogl_on_message(
 		"%d: %s of %s severity, raised from %s: %s\n",
 		id, _type, _severity, _source, msg
 	);
-}
-
-void msleep(long msec) {
-	struct timespec ts;
-	int res;
-
-	ts.tv_sec = msec / 1000;
-	ts.tv_nsec = (msec % 1000) * 1000000;
-
-	do {
-		res = nanosleep(&ts, &ts);
-	} while (res && errno == EINTR);
 }
 
 float lerp(float start, float end, float t) {

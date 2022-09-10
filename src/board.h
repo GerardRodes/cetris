@@ -16,6 +16,7 @@
 #include "piece.h"
 #include "util.h"
 #include "cube.h"
+#include "prog.h"
 
 #define QUAD_POINTS 4
 
@@ -29,25 +30,13 @@ typedef struct {
 	uint8_t rows;
 	struct {
 		GLuint vao;
-		GLuint prog;
-		struct {
-			GLint pos;
-			GLint col;
-		} a;
 	} gl_board;
 	struct {
 		quads_vbo_attr* quads_buf;
 		uint32_t quads_cap;
 		uint32_t quads_len;
-		GLuint prog;
 		GLuint vao;
 		GLuint quads_vbo;
-		struct {
-			GLint model_tx;
-			GLint color;
-			GLint quad;
-			GLint normal;
-		} a;
 	} gl_quad;
 
 	struct {
@@ -203,18 +192,14 @@ void board_init_vao(board* b) {
 	glGenVertexArrays(1, &b->gl_board.vao);
 	glBindVertexArray(b->gl_board.vao);
 	{
-		GLuint vtx_vbo;
-		glGenBuffers(1, &vtx_vbo);
-		glBindBuffer(GL_ARRAY_BUFFER, vtx_vbo);
+		GLuint vbo;
+		glGenBuffers(1, &vbo);
+		glBindBuffer(GL_ARRAY_BUFFER, vbo);
 		glBufferData(GL_ARRAY_BUFFER, sizeof(board_vtx), board_vtx, GL_STATIC_DRAW);
-		{
-			glVertexAttribPointer(b->gl_board.a.pos, 2, GL_FLOAT, GL_FALSE, sizeof(float)*5, 0);
-			glEnableVertexAttribArray(b->gl_board.a.pos);
-		}
-		{
-			glVertexAttribPointer(b->gl_board.a.col, 3, GL_FLOAT, GL_FALSE, sizeof(float)*5, (void*)(sizeof(float)*2));
-			glEnableVertexAttribArray(b->gl_board.a.col);
-		}
+			glVertexAttribPointer(prog_board_a_pos, 2, GL_FLOAT, GL_FALSE, sizeof(float)*5, 0);
+				glEnableVertexAttribArray(prog_board_a_pos);
+			glVertexAttribPointer(prog_board_a_col, 3, GL_FLOAT, GL_FALSE, sizeof(float)*5, (void*)(sizeof(float)*2));
+				glEnableVertexAttribArray(prog_board_a_col);
 		glBindBuffer(GL_ARRAY_BUFFER, 0);
 	}
 	glBindVertexArray(0);
@@ -223,33 +208,31 @@ void board_init_vao(board* b) {
 void board_init_grid_vao(board* b) {
 	glGenVertexArrays(1, &b->gl_quad.vao);
 	glBindVertexArray(b->gl_quad.vao);
-	// quad vtxs
 	{
+		// quad vtxs
 		GLuint vbo;
 		glGenBuffers(1, &vbo);
 		glBindBuffer(GL_ARRAY_BUFFER, vbo);
-		glBufferData(GL_ARRAY_BUFFER, sizeof(cube_data), cube_data, GL_STATIC_DRAW);
-			glVertexAttribPointer(b->gl_quad.a.quad, 3, GL_FLOAT, GL_FALSE, sizeof(float)*6, (void*)0);
-				glEnableVertexAttribArray(b->gl_quad.a.quad);
-			glVertexAttribPointer(b->gl_quad.a.normal, 3, GL_FLOAT, GL_FALSE, sizeof(float)*6, (void*)(sizeof(float)*3));
-				glEnableVertexAttribArray(b->gl_quad.a.normal);
+			glBufferData(GL_ARRAY_BUFFER, sizeof(cube_data), cube_data, GL_STATIC_DRAW);
+			glVertexAttribPointer(prog_quad_a_quad, 3, GL_FLOAT, GL_FALSE, sizeof(float)*6, (void*)0);
+				glEnableVertexAttribArray(prog_quad_a_quad);
+			glVertexAttribPointer(prog_quad_a_normal, 3, GL_FLOAT, GL_FALSE, sizeof(float)*6, (void*)(sizeof(float)*3));
+				glEnableVertexAttribArray(prog_quad_a_normal);
 		glBindBuffer(GL_ARRAY_BUFFER, 0);
 	}
-	// quads positions in grid
 	{
+		// quads positions in grid
 		glGenBuffers(1, &b->gl_quad.quads_vbo);
 		glBindBuffer(GL_ARRAY_BUFFER, b->gl_quad.quads_vbo);
-		{ // todo: not working :( maybe try to send unpacked first
-			glEnableVertexAttribArray(b->gl_quad.a.color);
-			glVertexAttribIPointer(b->gl_quad.a.color, 1, GL_UNSIGNED_INT, sizeof(quads_vbo_attr), (void*)offsetof(quads_vbo_attr, rgba));
-			glVertexAttribDivisor(b->gl_quad.a.color, 1);
-		}
-		// a mat4 attribute has to be initialized as 4 vec4
-		for (uint8_t i = 0; i < 4; i++) {
-			glEnableVertexAttribArray(b->gl_quad.a.model_tx + i);
-			glVertexAttribPointer(b->gl_quad.a.model_tx + i, 4, GL_FLOAT, GL_FALSE, sizeof(quads_vbo_attr), (void*)(offsetof(quads_vbo_attr, model_tx) + (sizeof(vec4)*i)));
-			glVertexAttribDivisor(b->gl_quad.a.model_tx + i, 1);
-		}
+			glVertexAttribIPointer(prog_quad_a_color, 1, GL_UNSIGNED_INT, sizeof(quads_vbo_attr), (void*)offsetof(quads_vbo_attr, rgba));
+				glEnableVertexAttribArray(prog_quad_a_color);
+				glVertexAttribDivisor(prog_quad_a_color, 1);
+			// a mat4 attribute has to be initialized as 4 vec4
+			for (uint8_t i = 0; i < 4; i++) {
+				glVertexAttribPointer(prog_quad_a_model_tx + i, 4, GL_FLOAT, GL_FALSE, sizeof(quads_vbo_attr), (void*)(offsetof(quads_vbo_attr, model_tx) + (sizeof(vec4)*i)));
+					glEnableVertexAttribArray(prog_quad_a_model_tx + i);
+					glVertexAttribDivisor(prog_quad_a_model_tx + i, 1);
+			}
 		glBindBuffer(GL_ARRAY_BUFFER, 0);
 	}
 	glBindVertexArray(0);
@@ -494,6 +477,9 @@ void board_quads_vbo_attrs(board* b, quads_vbo_attr* out, uint32_t* out_len) {
 }
 
 void board_tick (board* b, double t, double dt) {
+	// SET_UNIFORM(prog_board, u_time, glUniform1f(_loc, t));
+	SET_UNIFORM(prog_quad, u_time, glUniform1f(_loc, t));
+
 	if (b->animation.clear.running) {
 		board_animation_clear_rows_run(b, dt);
 		return;
@@ -524,50 +510,35 @@ void board_send_quads_pos(board* b) {
 }
 
 void board_draw (board* b) {
-	{
-		glUseProgram(b->gl_board.prog);
+	glUseProgram(prog_board);
 		glBindVertexArray(b->gl_board.vao);
-		glLineWidth(5);
-		glDrawArrays(GL_LINE_LOOP, 0, 4);
-		glLineWidth(1);
-		glUseProgram(0);
-	}
-	{
-		board_send_quads_pos(b);
-		glUseProgram(b->gl_quad.prog);
+			glLineWidth(5);
+			glDrawArrays(GL_LINE_LOOP, 0, 4);
+			glLineWidth(1);
+		glBindVertexArray(0);
+	glUseProgram(0);
+
+	board_send_quads_pos(b);
+	glUseProgram(prog_quad);
 		glBindVertexArray(b->gl_quad.vao);
-		glDrawArraysInstanced(GL_TRIANGLES, 0, 3*2*6, (int)b->gl_quad.quads_len);
-		glUseProgram(0);
-	}
+			glDrawArraysInstanced(GL_TRIANGLES, 0, 3*2*6, (int)b->gl_quad.quads_len);
+		glBindVertexArray(0);
+	glUseProgram(0);
 }
 
-board board_new (
-	uint8_t cols,
-	uint8_t rows,
-	GLuint board_prog,
-	GLuint quad_prog
-) {
+board board_new (uint8_t cols, uint8_t rows) {
 	// todo: combine allocs
 	const uint32_t quads_cap = rows * cols * sizeof(quads_vbo_attr);
 	board b = {
 		.cols = cols,
 		.rows = rows,
 		.gl_board = {
-			.prog = board_prog,
 			.vao = 0,
-			.a = {
-				.pos = -1,
-			}
 		},
 		.gl_quad = {
-			.prog = quad_prog,
 			.vao = 0,
 			.quads_cap = quads_cap,
 			.quads_buf = calloc(quads_cap, 1),
-			.a = {
-				.model_tx = -1,
-				.quad = -1,
-			}
 		},
 		// internal representation in bytes of the tetris grid
 		.grid_buf = calloc(cols * rows, sizeof(uint32_t)),
@@ -583,20 +554,6 @@ board board_new (
 		},
 		.score = 0,
 	};
-
-	b.gl_board.a.pos = glGetAttribLocation(board_prog, "a_pos");
-		assert(b.gl_board.a.pos != -1);
-	b.gl_board.a.col = glGetAttribLocation(board_prog, "a_col");
-		assert(b.gl_board.a.col != -1);
-
-	b.gl_quad.a.model_tx = glGetAttribLocation(quad_prog, "a_model_tx");
-		assert(b.gl_quad.a.model_tx != -1);
-	b.gl_quad.a.color = glGetAttribLocation(quad_prog, "a_color");
-		assert(b.gl_quad.a.color != -1);
-	b.gl_quad.a.quad = glGetAttribLocation(quad_prog, "a_quad");
-		assert(b.gl_quad.a.quad != -1);
-	b.gl_quad.a.normal = glGetAttribLocation(quad_prog, "a_normal");
-		assert(b.gl_quad.a.normal != -1);
 
 	board_init_vao(&b);
 	board_init_grid_vao(&b);

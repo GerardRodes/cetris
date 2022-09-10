@@ -3,11 +3,11 @@
 
 #include <math.h>
 #include <stdint.h>
-
 #include "board.h"
 #include "piece.h"
 #include "util.h"
 #include "text.h"
+#include "prog.h"
 
 typedef struct {
 	board main_board;
@@ -60,25 +60,27 @@ typedef struct {
 
 void game_update_camera_tx_matrix_uniforms(game* g) {
 	glm_lookat(g->camera.pos, g->camera.center, (vec3){0,1,0}, g->tx_matrix.view);
-	SET_UNIFORM(g->main_board.gl_quad.prog, u_view_tx, glUniformMatrix4fv(_loc, 1, GL_FALSE, g->tx_matrix.view[0]));
-	SET_UNIFORM(g->main_board.gl_board.prog, u_view_tx, glUniformMatrix4fv(_loc, 1, GL_FALSE, g->tx_matrix.view[0]));
+	SET_UNIFORM(prog_quad, u_view_tx, glUniformMatrix4fv(_loc, 1, GL_FALSE, g->tx_matrix.view[0]));
+	SET_UNIFORM(prog_board, u_view_tx, glUniformMatrix4fv(_loc, 1, GL_FALSE, g->tx_matrix.view[0]));
+	SET_UNIFORM(prog_light, u_view_tx, glUniformMatrix4fv(_loc, 1, GL_FALSE, g->tx_matrix.view[0]));
 }
 
 void game_update_tx_matrix_uniforms(game* g, float win_width, float win_height) {
 	glm_perspective_default(win_width/win_height, g->tx_matrix.proj);
-	SET_UNIFORM(g->main_board.gl_quad.prog, u_proj_tx, glUniformMatrix4fv(_loc, 1, GL_FALSE, g->tx_matrix.proj[0]));
-	SET_UNIFORM(g->main_board.gl_board.prog, u_proj_tx, glUniformMatrix4fv(_loc, 1, GL_FALSE, g->tx_matrix.proj[0]));
+	SET_UNIFORM(prog_quad, u_proj_tx, glUniformMatrix4fv(_loc, 1, GL_FALSE, g->tx_matrix.proj[0]));
+	SET_UNIFORM(prog_board, u_proj_tx, glUniformMatrix4fv(_loc, 1, GL_FALSE, g->tx_matrix.proj[0]));
+	SET_UNIFORM(prog_light, u_proj_tx, glUniformMatrix4fv(_loc, 1, GL_FALSE, g->tx_matrix.proj[0]));
 
 	game_update_camera_tx_matrix_uniforms(g);
 
 	// todo: store boards txs on array and provide them to shader
 	glm_mat4_identity(g->tx_matrix.board);
 	board_tx_matrix(&g->main_board, g->tx_matrix.board);
-	SET_UNIFORM(g->main_board.gl_board.prog, u_model_tx, glUniformMatrix4fv(_loc, 1, GL_FALSE, g->tx_matrix.board[0]));
+	SET_UNIFORM(prog_board, u_model_tx, glUniformMatrix4fv(_loc, 1, GL_FALSE, g->tx_matrix.board[0]));
 }
-game game_new(GLuint board_prog, GLuint quad_prog) {
+game game_new() {
 	game g = {
-		.main_board = board_new(10, 20, board_prog, quad_prog),
+		.main_board = board_new(10, 20),
 		.camera = { .pos = {0,0,5}, .center = {0,0,0} },
 		.input = {
 			.piece = {
@@ -92,8 +94,8 @@ game game_new(GLuint board_prog, GLuint quad_prog) {
 }
 
 void game_tick(game* g, double t, double dt) {
-	{
-		{
+	{ // input
+		{ // controls
 			if (g->input.piece.move.down) {
 				if (
 					g->input.piece.last.down == 0 ||
@@ -136,7 +138,7 @@ void game_tick(game* g, double t, double dt) {
 				g->input.piece.last.right = 0;
 			}
 		}
-		{
+		{  // camera
 			if (g->input.camera.move.left) {
 				g->camera.pos[0] -= 5 * dt;
 			}
@@ -163,6 +165,7 @@ void game_tick(game* g, double t, double dt) {
 }
 
 void game_draw(game* g) {
+	// todo: switch to manual gamma correction
 	glEnable(GL_FRAMEBUFFER_SRGB);
 
 	// todo: this enables blend on all buffers

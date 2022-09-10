@@ -10,10 +10,12 @@ uniform mat4 u_view_tx;
 
 flat out uint _color;
 flat out vec3 _normal;
+out vec3 _world_pos;
 
 void main() {
-	gl_Position =  u_proj_tx * u_view_tx * a_model_tx * vec4(a_quad, 1.0f);
+	_world_pos = vec3(a_model_tx * vec4(a_quad, 1.0f));
+	gl_Position =  u_proj_tx * u_view_tx * vec4(_world_pos, 1.0f);
 
 	_color = a_color;
-	_normal = a_normal;
+	_normal = normalize(a_normal);
 }
