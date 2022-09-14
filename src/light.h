@@ -17,9 +17,11 @@ vec3 lights[LIGHTS_NUM];
 void light_tick (double t) {
 	for (uint8_t i = 0; i < LIGHTS_NUM; i++) {
 		lights[i][0] = sin(t);
-		lights[i][1] = 1.5*cos(t);
-		lights[i][2] = 2*sin(t*2);
+		lights[i][1] = cos(t);
+		lights[i][2] = 1;
 	}
+	// todo: set on loop
+	SET_UNIFORM(prog_quad, u_light_pos, glUniform3f(_loc, lights[0][0], lights[0][1], lights[0][2]));
 }
 
 void light_update_vbo () {

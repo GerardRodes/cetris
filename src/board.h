@@ -292,7 +292,7 @@ void board_clear_rows(board* b, uint8_t start, uint8_t end) {
 }
 
 void board_animation_clear_rows_apply(board* b, mat4 tx, uint32_t* rgba, uint8_t col, uint8_t row) {
-	float p = normalize(0, b->animation.clear.duration, b->animation.clear.dt);
+	float progress = normalize(0, b->animation.clear.duration, b->animation.clear.dt);
 
 	float col_r = normalize(0, b->cols, col);
 
@@ -300,20 +300,23 @@ void board_animation_clear_rows_apply(board* b, mat4 tx, uint32_t* rgba, uint8_t
 		row >= b->animation.clear.row.start &&
 		row <= b->animation.clear.row.end
 	) {
+		// animation of quads to clear
 		float row_r = normalize(b->animation.clear.row.start, b->animation.clear.row.end+1, row);
 
-		float n = clamp(0, 255, 255*p*1.2);
+		float n = clamp(0, 255, 255*progress*1.2);
 		uint32_t alpha = (uint8_t)(255 - n) << (3*8);
 		*rgba = ((*rgba) & ~0xFF'00'00'00) | alpha;
 
-		p = bezier3(0, -5*col_r, 10*row_r, 40, p);
+		float p = bezier3(0, -5*col_r, 10*row_r, 40, progress);
 		p *= -1;
 		glm_translate_z(tx, p);
+		glm_rotate(tx, glm_rad(360*progress), (vec3){1, 1, 1});
 	} else if (
 		row < b->animation.clear.row.start
 	) {
-		if (p < 0.5) return;
-		p = normalize(0.5, 1, p);
+		// animation lines above
+		if (progress < 0.5) return;
+		float p = normalize(0.5, 1, progress);
 		float row_r = normalize(0, b->animation.clear.row.start-1, row);
 		float rows_to_move = b->animation.clear.row.end - b->animation.clear.row.start + 1;
 		p = bezier3(0, 0.8*col_r, 0.9*row_r, rows_to_move, p);
@@ -375,6 +378,11 @@ void board_falling_lock(board* b) {
 		for (uint8_t col = 0; col < b->cols; col++) {
 			if (board_get_cell(b, row, col) == 0) {
 				if (start != -1) {
+					// fixme: we are overriding subsequents clears because we
+					// only have 1 set of rows clearing at the same time
+					// we should allot to define different sets of rows to allow
+					// to clear non-sequential rows.
+					// it works if we clear directly without the animations
 					board_animation_clear_rows_start(b, (int8_t)start, row-1);
 					// board_clear_rows(b, (int8_t)start, row-1);
 					start = -1;
@@ -478,7 +486,7 @@ void board_quads_vbo_attrs(board* b, quads_vbo_attr* out, uint32_t* out_len) {
 
 void board_tick (board* b, double t, double dt) {
 	// SET_UNIFORM(prog_board, u_time, glUniform1f(_loc, t));
-	SET_UNIFORM(prog_quad, u_time, glUniform1f(_loc, t));
+	// SET_UNIFORM(prog_quad, u_time, glUniform1f(_loc, t));
 
 	if (b->animation.clear.running) {
 		board_animation_clear_rows_run(b, dt);

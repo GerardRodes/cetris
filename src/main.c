@@ -268,7 +268,7 @@ int main () {
 			}
 			{
 				light_tick(t);
-				light_draw();
+				// light_draw();
 			}
 			{
 				if (DRAW_PROF_TEXT) {
